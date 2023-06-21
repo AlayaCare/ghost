@@ -16,6 +16,7 @@ type Repository struct {
 		ExternalUserReaders []string `yaml:"externalUserReaders"`
 		ExternalUserWriters []string `yaml:"externalUserWriters"`
 	} `yaml:"data"`
+	Owner *string // team name owning the repo (if any)
 }
 
 /*
@@ -38,9 +39,10 @@ func NewRepository(fs afero.Fs, filename string) (*Repository, error) {
 }
 
 /**
- * ReadRepositories reads all the files in the dirname directory and returns
+ * ReadRepositories reads all the files in the dirname directory and
+ * add them to the owner's team and returns
  * - a map of Repository objects
- * - a slice of errors that must stop the vlidation process
+ * - a slice of errors that must stop the validation process
  * - a slice of warning that must not stop the validation process
  */
 func ReadRepositories(fs afero.Fs, teamDirname string, teams map[string]*Team, externalUsers map[string]*User) (map[string]*Repository, []error, []error) {
@@ -84,6 +86,8 @@ func ReadRepositories(fs afero.Fs, teamDirname string, teams map[string]*Team, e
 							repos[repo.Metadata.Name] = repo
 						}
 					}
+					teamname := team.Name()
+					repo.Owner = &teamname
 				}
 			}
 		}

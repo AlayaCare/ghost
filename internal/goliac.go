@@ -27,8 +27,10 @@ type Goliac interface {
 }
 
 type GoliacImpl struct {
-	local        GoliacLocal
-	githubClient github.GitHubClient
+	local         GoliacLocal
+	remote        GoliacRemote
+	githubClient  github.GitHubClient
+	reconciliator GoliacReconciliator
 }
 
 func NewGoliacImpl() (Goliac, error) {
@@ -43,9 +45,13 @@ func NewGoliacImpl() (Goliac, error) {
 		return nil, err
 	}
 
+	reconciliator := NewGoliacReconciliatorImpl()
+
 	return &GoliacImpl{
-		local:        NewGoliacLocalImpl(),
-		githubClient: githubClient,
+		local:         NewGoliacLocalImpl(),
+		githubClient:  githubClient,
+		remote:        NewGoliacRemoteImpl(githubClient),
+		reconciliator: reconciliator,
 	}, nil
 }
 
@@ -79,7 +85,8 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 }
 
 func (g *GoliacImpl) ApplyToGithub(dryrun bool) error {
-	return nil
+	err := g.reconciliator.Reconciliate(g.local, g.remote, dryrun)
+	return err
 }
 
 // List Repsotiories that are managed by goliac

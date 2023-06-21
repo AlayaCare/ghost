@@ -41,7 +41,7 @@ func TestQueryGraphQLAPI(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(result, "octocat") {
+	if !strings.Contains(string(result), "octocat") {
 		t.Errorf("expected 'octocat' in the result, got %s", result)
 	}
 }
