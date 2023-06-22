@@ -37,8 +37,8 @@ type GithubTeam struct {
 }
 
 type GithubTeamRepo struct {
-	Name       string
-	Permission string
+	Name       string // repository name
+	Permission string // possible values: ADMIN, MAINTAIN, WRITE, TRIAGE, READ
 }
 
 type GoliacRemoteImpl struct {

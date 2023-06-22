@@ -15,6 +15,7 @@ type Repository struct {
 		Readers             []string `yaml:"readers"`
 		ExternalUserReaders []string `yaml:"externalUserReaders"`
 		ExternalUserWriters []string `yaml:"externalUserWriters"`
+		IsPublic            bool     `yaml:"public"`
 	} `yaml:"data"`
 	Owner *string // team name owning the repo (if any)
 }

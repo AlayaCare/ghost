@@ -7,7 +7,7 @@ type ReconciliatorListener interface {
 	UpdateTeamRemoveMember(teamslug string, username string)
 	DeleteTeam(teamslug string)
 
-	CreateRepository(reponame string, descrition string, private bool)
+	CreateRepository(reponame string, descrition string, writers []string, readers []string, public bool)
 	//UpdateRepsotiryUpdateArchive(reponame string, archived bool)
 	//UpdateRepsotiryUpdatePrivate(reponame string, private bool)
 	UpdateRepositoryAddTeamAccess(reponame string, teamslug string, permission string)    // permission can be "pull", "push", or "admin" which correspond to read, write, and admin access.
@@ -16,4 +16,5 @@ type ReconciliatorListener interface {
 	//	UpdateRepositoryAddCollaboratorAccess(reponame string, username string, permission string)    // permission can be "pull", "push", or "admin" which correspond to read, write, and admin access.
 	//	UpdateRepositoryUpdateCollaboratorAccess(reponame string, username string, permission string) // permission can be "pull", "push", or "admin" which correspond to read, write, and admin access.
 	//	UpdateRepositoryRemoveCollaboratorAccess(reponame string, username string)
+	DeleteRepository(reponame string)
 }
