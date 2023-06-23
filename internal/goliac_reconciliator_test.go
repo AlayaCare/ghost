@@ -65,22 +65,22 @@ type ReconciliatorListenerRecorder struct {
 	TeamMemberRemoved map[string][]string
 	TeamDeleted       map[string]bool
 
-	RepositoryCreated     map[string]bool
-	RepositoryTeamAdded   map[string][]string
-	RepositoryTeamUpdated map[string][]string
+	RepositoryCreated   map[string]bool
+	RepositoryTeamAdded map[string][]string
+	//	RepositoryTeamUpdated map[string][]string
 	RepositoryTeamRemoved map[string][]string
 	RepositoriesDeleted   map[string]bool
 }
 
 func NewReconciliatorListenerRecorder() *ReconciliatorListenerRecorder {
 	r := ReconciliatorListenerRecorder{
-		TeamsCreated:          make(map[string][]string),
-		TeamMemberAdded:       make(map[string][]string),
-		TeamMemberRemoved:     make(map[string][]string),
-		TeamDeleted:           make(map[string]bool),
-		RepositoryCreated:     make(map[string]bool),
-		RepositoryTeamAdded:   make(map[string][]string),
-		RepositoryTeamUpdated: make(map[string][]string),
+		TeamsCreated:        make(map[string][]string),
+		TeamMemberAdded:     make(map[string][]string),
+		TeamMemberRemoved:   make(map[string][]string),
+		TeamDeleted:         make(map[string]bool),
+		RepositoryCreated:   make(map[string]bool),
+		RepositoryTeamAdded: make(map[string][]string),
+		//		RepositoryTeamUpdated: make(map[string][]string),
 		RepositoryTeamRemoved: make(map[string][]string),
 		RepositoriesDeleted:   make(map[string]bool),
 	}
@@ -104,9 +104,10 @@ func (r *ReconciliatorListenerRecorder) CreateRepository(reponame string, descri
 func (r *ReconciliatorListenerRecorder) UpdateRepositoryAddTeamAccess(reponame string, teamslug string, permission string) {
 	r.RepositoryTeamAdded[reponame] = append(r.RepositoryTeamAdded[reponame], teamslug)
 }
-func (r *ReconciliatorListenerRecorder) UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) {
-	r.RepositoryTeamUpdated[reponame] = append(r.RepositoryTeamUpdated[reponame], teamslug)
-}
+
+//func (r *ReconciliatorListenerRecorder) UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) {
+//	r.RepositoryTeamUpdated[reponame] = append(r.RepositoryTeamUpdated[reponame], teamslug)
+//}
 func (r *ReconciliatorListenerRecorder) UpdateRepositoryRemoveTeamAccess(reponame string, teamslug string) {
 	r.RepositoryTeamRemoved[reponame] = append(r.RepositoryTeamRemoved[reponame], teamslug)
 }
