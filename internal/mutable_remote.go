@@ -111,13 +111,13 @@ func (m *MutableGoliacRemoteImpl) UpdateRepositoryAddTeamAccess(reponame string,
 	}
 }
 
-//func (m *MutableGoliacRemoteImpl) UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) {
-//	if tr, ok := m.teamRepos[teamslug]; ok {
-//		if r, ok := tr[reponame]; ok {
-//			r.Permission = permission
-//		}
-//	}
-//}
+func (m *MutableGoliacRemoteImpl) UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) {
+	if tr, ok := m.teamRepos[teamslug]; ok {
+		if r, ok := tr[reponame]; ok {
+			r.Permission = permission
+		}
+	}
+}
 func (m *MutableGoliacRemoteImpl) UpdateRepositoryRemoveTeamAccess(reponame string, teamslug string) {
 	if tr, ok := m.teamRepos[teamslug]; ok {
 		delete(tr, reponame)

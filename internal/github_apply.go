@@ -37,16 +37,15 @@ func (g *GithubApplyListener) UpdateRepositoryAddTeamAccess(reponame string, tea
 
 }
 
-//func (g *GithubApplyListener) UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) {
-//
-//}
+func (g *GithubApplyListener) UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) {
+
+}
 func (g *GithubApplyListener) UpdateRepositoryRemoveTeamAccess(reponame string, teamslug string) {
 
 }
 func (g *GithubApplyListener) DeleteRepository(reponame string) {
 	// NOOP: we dont want to delete repositories
 }
-
 func (g *GithubApplyListener) Begin() {
 	g.commands = make([]GithubApplyCommand, 0)
 }
