@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Alayacare/goliac/internal/entity"
+	"github.com/Alayacare/goliac/internal/slugify"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 )
@@ -41,11 +42,12 @@ type GoliacRemoteMock struct {
 func (m *GoliacRemoteMock) Load() error {
 	return nil
 }
-func (m *GoliacRemoteMock) TeamSlugByName(name string) (string, bool) {
-	if _, ok := m.teams[name]; ok {
-		return name, true
+func (m *GoliacRemoteMock) TeamSlugByName() map[string]string {
+	slugs := make(map[string]string)
+	for k, _ := range m.teams {
+		slugs[k] = slugify.Make(k)
 	}
-	return "", false
+	return slugs
 }
 func (m *GoliacRemoteMock) Teams() map[string]*GithubTeam {
 	return m.teams
@@ -110,6 +112,12 @@ func (r *ReconciliatorListenerRecorder) UpdateRepositoryRemoveTeamAccess(reponam
 }
 func (r *ReconciliatorListenerRecorder) DeleteRepository(reponame string) {
 	r.RepositoriesDeleted[reponame] = true
+}
+func (r *ReconciliatorListenerRecorder) Begin() {
+}
+func (r *ReconciliatorListenerRecorder) Rollback(error) {
+}
+func (r *ReconciliatorListenerRecorder) Commit() {
 }
 
 func TestReconciliation(t *testing.T) {

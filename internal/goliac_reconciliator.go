@@ -1,5 +1,8 @@
 package internal
 
+/*
+ * GoliacReconciliator is here to sync the local state to the remote state
+ */
 type GoliacReconciliator interface {
 	AddListener(ReconciliatorListener)
 	Reconciliate(local GoliacLocal, remote GoliacRemote, dryrun bool) error
@@ -20,22 +23,29 @@ func (r *GoliacReconciliatorImpl) AddListener(l ReconciliatorListener) {
 }
 
 func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacRemote, dryrun bool) error {
-	err := r.reconciliateTeams(local, remote, dryrun)
+	rremote := NewMutableGoliacRemoteImpl(remote)
+	r.Begin(dryrun)
+	err := r.reconciliateTeams(local, rremote, dryrun)
 	if err != nil {
+		r.Rollback(dryrun, err)
 		return err
 	}
 
-	err = r.reconciliateRepositories(local, remote, dryrun)
+	err = r.reconciliateRepositories(local, rremote, dryrun)
 	if err != nil {
+		r.Rollback(dryrun, err)
 		return err
 	}
+
+	r.Commit(dryrun)
+
 	return nil
 }
 
 /*
  * This function sync teams and team's members
  */
-func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote GoliacRemote, dryrun bool) error {
+func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote *MutableGoliacRemoteImpl, dryrun bool) error {
 	ghTeams := remote.Teams()
 
 	rTeams := make(map[string]*GithubTeam)
@@ -44,16 +54,14 @@ func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote Go
 	}
 
 	for _, lTeam := range local.Teams() {
-		slugTeam, ok := remote.TeamSlugByName(lTeam.Metadata.Name)
+		slugTeam, ok := remote.TeamSlugByName()[lTeam.Metadata.Name]
 		if !ok {
 			// deal with non existing team
 			members := make([]string, 0)
 			members = append(members, lTeam.Data.Members...)
 			members = append(members, lTeam.Data.Owners...)
-			for _, l := range r.listeners {
-				// CREATE team
-				l.CreateTeam(lTeam.Metadata.Name, lTeam.Metadata.Name, members)
-			}
+			// CREATE team
+			r.CreateTeam(dryrun, remote, lTeam.Metadata.Name, lTeam.Metadata.Name, members)
 		} else {
 			// deal with existing team
 			rTeam := ghTeams[slugTeam]
@@ -68,19 +76,15 @@ func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote Go
 
 			for _, m := range rTeam.Members {
 				if _, ok := localMembers[m]; !ok {
-					for _, l := range r.listeners {
-						// REMOVE team member
-						l.UpdateTeamRemoveMember(slugTeam, m)
-					}
+					// REMOVE team member
+					r.UpdateTeamRemoveMember(dryrun, remote, slugTeam, m)
 				} else {
 					delete(localMembers, m)
 				}
 			}
 			for m, _ := range localMembers {
-				for _, l := range r.listeners {
-					// ADD team member
-					l.UpdateTeamAddMember(slugTeam, m, "member")
-				}
+				// ADD team member
+				r.UpdateTeamAddMember(dryrun, remote, slugTeam, m, "member")
 			}
 			delete(rTeams, slugTeam)
 		}
@@ -88,10 +92,8 @@ func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote Go
 
 	// remaining (GH) teams (aka not found locally)
 	for _, rTeam := range rTeams {
-		for _, l := range r.listeners {
-			// DELETE team
-			l.DeleteTeam(rTeam.Slug)
-		}
+		// DELETE team
+		r.DeleteTeam(dryrun, remote, rTeam.Slug)
 	}
 	return nil
 }
@@ -99,7 +101,7 @@ func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote Go
 /*
  * This function sync repositories and team's repositories permissions
  */
-func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, remote GoliacRemote, dryrun bool) error {
+func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, remote *MutableGoliacRemoteImpl, dryrun bool) error {
 	ghRepos := remote.Repositories()
 	rRepos := make(map[string]*GithubRepository)
 	for k, v := range ghRepos {
@@ -125,10 +127,8 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 			if lRepo.Owner != nil {
 				writers = append(writers, *lRepo.Owner)
 			}
-			for _, l := range r.listeners {
-				// CREATE team
-				l.CreateRepository(reponame, reponame, writers, lRepo.Data.Readers, lRepo.Data.IsPublic)
-			}
+			// CREATE team
+			r.CreateRepository(dryrun, remote, reponame, reponame, writers, lRepo.Data.Readers, lRepo.Data.IsPublic)
 		} else {
 			// deal with existing repo
 
@@ -159,18 +159,17 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 			// let's deal with readers
 			for teamSlug, teamName := range remoteReadMembers {
 				if _, ok := localReadMembers[teamName]; !ok {
-					for _, l := range r.listeners {
-						// REMOVE team member
-						l.UpdateRepositoryRemoveTeamAccess(reponame, teamSlug)
-					}
+					// REMOVE team member
+					r.UpdateRepositoryRemoveTeamAccess(dryrun, remote, reponame, teamSlug)
 				} else {
 					delete(localReadMembers, teamName)
 				}
 			}
 			for m, _ := range localReadMembers {
-				for _, l := range r.listeners {
-					// ADD team member
-					if teamSlug, ok := remote.TeamSlugByName(m); ok {
+				// ADD team member
+				if teamSlug, ok := remote.TeamSlugByName()[m]; ok {
+					remote.UpdateRepositoryAddTeamAccess(reponame, teamSlug, "READ")
+					for _, l := range r.listeners {
 						l.UpdateRepositoryAddTeamAccess(reponame, teamSlug, "READ")
 					}
 				}
@@ -179,20 +178,16 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 			// let's deal with writers
 			for teamSlug, teamName := range remoteWriteMembers {
 				if _, ok := localWriteMembers[teamName]; !ok {
-					for _, l := range r.listeners {
-						// REMOVE team member
-						l.UpdateRepositoryRemoveTeamAccess(reponame, teamSlug)
-					}
+					// REMOVE team member
+					r.UpdateRepositoryRemoveTeamAccess(dryrun, remote, reponame, teamSlug)
 				} else {
 					delete(localWriteMembers, teamName)
 				}
 			}
 			for m, _ := range localWriteMembers {
-				for _, l := range r.listeners {
+				if teamSlug, ok := remote.TeamSlugByName()[m]; ok {
 					// ADD team member
-					if teamSlug, ok := remote.TeamSlugByName(m); ok {
-						l.UpdateRepositoryAddTeamAccess(reponame, teamSlug, "WRITE")
-					}
+					r.UpdateRepositoryAddTeamAccess(dryrun, remote, reponame, teamSlug, "WRITE")
 				}
 			}
 
@@ -202,10 +197,98 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 
 	// remaining (GH) teams (aka not found locally)
 	for reponame, _ := range rRepos {
+		// DELETE team
+		r.DeleteRepository(dryrun, remote, reponame)
+	}
+	return nil
+}
+
+func (r *GoliacReconciliatorImpl) CreateTeam(dryrun bool, remote *MutableGoliacRemoteImpl, teamname string, description string, members []string) {
+	remote.CreateTeam(teamname, description, members)
+	if !dryrun {
 		for _, l := range r.listeners {
-			// DELETE team
+			l.CreateTeam(teamname, description, members)
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) UpdateTeamAddMember(dryrun bool, remote *MutableGoliacRemoteImpl, teamslug string, username string, role string) {
+	remote.UpdateTeamAddMember(teamslug, username, "member")
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.UpdateTeamAddMember(teamslug, username, "member")
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) UpdateTeamRemoveMember(dryrun bool, remote *MutableGoliacRemoteImpl, teamslug string, username string) {
+	remote.UpdateTeamRemoveMember(teamslug, username)
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.UpdateTeamRemoveMember(teamslug, username)
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) DeleteTeam(dryrun bool, remote *MutableGoliacRemoteImpl, teamslug string) {
+	remote.DeleteTeam(teamslug)
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.DeleteTeam(teamslug)
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) CreateRepository(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, descrition string, writers []string, readers []string, public bool) {
+	remote.CreateRepository(reponame, reponame, writers, readers, public)
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.CreateRepository(reponame, reponame, writers, readers, public)
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) UpdateRepositoryAddTeamAccess(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, teamslug string, permission string) {
+	remote.UpdateRepositoryAddTeamAccess(reponame, teamslug, "WRITE")
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.UpdateRepositoryAddTeamAccess(reponame, teamslug, "WRITE")
+		}
+	}
+}
+
+//func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdateTeamAccess(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, teamslug string, permission string) {
+//
+//}
+func (r *GoliacReconciliatorImpl) UpdateRepositoryRemoveTeamAccess(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, teamslug string) {
+	remote.UpdateRepositoryRemoveTeamAccess(reponame, teamslug)
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.UpdateRepositoryRemoveTeamAccess(reponame, teamslug)
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) DeleteRepository(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string) {
+	remote.DeleteRepository(reponame)
+	if !dryrun {
+		for _, l := range r.listeners {
 			l.DeleteRepository(reponame)
 		}
 	}
-	return nil
+}
+func (r *GoliacReconciliatorImpl) Begin(dryrun bool) {
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.Begin()
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) Rollback(dryrun bool, err error) {
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.Rollback(err)
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) Commit(dryrun bool) {
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.Commit()
+		}
+	}
 }

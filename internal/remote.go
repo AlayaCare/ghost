@@ -18,7 +18,7 @@ type GoliacRemote interface {
 	// Load from a github repository
 	Load() error
 
-	TeamSlugByName(name string) (string, bool)
+	TeamSlugByName() map[string]string
 	Teams() map[string]*GithubTeam                           // the key is the team slug
 	Repositories() map[string]*GithubRepository              // the key is the repository name
 	TeamRepositories() map[string]map[string]*GithubTeamRepo // key is team slug, second key is repo name
@@ -59,9 +59,8 @@ func NewGoliacRemoteImpl(client github.GitHubClient) GoliacRemote {
 	}
 }
 
-func (g *GoliacRemoteImpl) TeamSlugByName(name string) (string, bool) {
-	v, ok := g.teamSlugByName[name]
-	return v, ok
+func (g *GoliacRemoteImpl) TeamSlugByName() map[string]string {
+	return g.teamSlugByName
 }
 
 func (g *GoliacRemoteImpl) Teams() map[string]*GithubTeam {
@@ -71,7 +70,7 @@ func (g *GoliacRemoteImpl) Repositories() map[string]*GithubRepository {
 	return g.repositories
 }
 func (g *GoliacRemoteImpl) TeamRepositories() map[string]map[string]*GithubTeamRepo {
-	return g.TeamRepositories()
+	return g.teamRepos
 }
 
 const listAllReposInOrg = `
