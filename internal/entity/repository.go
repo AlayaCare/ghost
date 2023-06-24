@@ -16,8 +16,9 @@ type Repository struct {
 		ExternalUserReaders []string `yaml:"externalUserReaders"`
 		ExternalUserWriters []string `yaml:"externalUserWriters"`
 		IsPublic            bool     `yaml:"public"`
+		IsArchived          bool     `yaml:"archived"`
 	} `yaml:"data"`
-	Owner *string // team name owning the repo (if any)
+	Owner *string // implicit. team name owning the repo (if any)
 }
 
 /*
@@ -46,12 +47,39 @@ func NewRepository(fs afero.Fs, filename string) (*Repository, error) {
  * - a slice of errors that must stop the validation process
  * - a slice of warning that must not stop the validation process
  */
-func ReadRepositories(fs afero.Fs, teamDirname string, teams map[string]*Team, externalUsers map[string]*User) (map[string]*Repository, []error, []error) {
+func ReadRepositories(fs afero.Fs, archivedDirname string, teamDirname string, teams map[string]*Team, externalUsers map[string]*User) (map[string]*Repository, []error, []error) {
 	errors := []error{}
 	warning := []error{}
 	repos := make(map[string]*Repository)
 
-	exist, err := afero.Exists(fs, teamDirname)
+	// archived dir
+	exist, err := afero.Exists(fs, archivedDirname)
+	if err != nil {
+		errors = append(errors, err)
+		return repos, errors, warning
+	}
+	if exist == true {
+		entries, err := afero.ReadDir(fs, archivedDirname)
+		if err != nil {
+			errors = append(errors, err)
+			return nil, errors, warning
+		}
+
+		for _, entry := range entries {
+			repo, err := NewRepository(fs, filepath.Join(archivedDirname, entry.Name()))
+			if err != nil {
+				errors = append(errors, err)
+			} else {
+				if err := repo.Validate(filepath.Join(archivedDirname, entry.Name()), teams, externalUsers, true); err != nil {
+					errors = append(errors, err)
+				} else {
+					repos[repo.Metadata.Name] = repo
+				}
+			}
+		}
+	}
+	// regular teams dir
+	exist, err = afero.Exists(fs, teamDirname)
 	if err != nil {
 		errors = append(errors, err)
 		return repos, errors, warning
@@ -80,15 +108,14 @@ func ReadRepositories(fs afero.Fs, teamDirname string, teams map[string]*Team, e
 					if err != nil {
 						errors = append(errors, err)
 					} else {
-						if err := repo.Validate(filepath.Join(teamDirname, team.Name(), sube.Name()), teams, externalUsers); err != nil {
+						if err := repo.Validate(filepath.Join(teamDirname, team.Name(), sube.Name()), teams, externalUsers, false); err != nil {
 							errors = append(errors, err)
 						} else {
-							repo.Data.Writers = append(repo.Data.Writers, team.Name())
+							teamname := team.Name()
+							repo.Owner = &teamname
 							repos[repo.Metadata.Name] = repo
 						}
 					}
-					teamname := team.Name()
-					repo.Owner = &teamname
 				}
 			}
 		}
@@ -97,7 +124,7 @@ func ReadRepositories(fs afero.Fs, teamDirname string, teams map[string]*Team, e
 	return repos, errors, warning
 }
 
-func (r *Repository) Validate(filename string, teams map[string]*Team, externalUsers map[string]*User) error {
+func (r *Repository) Validate(filename string, teams map[string]*Team, externalUsers map[string]*User, archived bool) error {
 
 	if r.ApiVersion != "v1" {
 		return fmt.Errorf("invalid apiVersion: %s for repository filename %s", r.ApiVersion, filename)
@@ -139,5 +166,12 @@ func (r *Repository) Validate(filename string, teams map[string]*Team, externalU
 		}
 	}
 
+	if archived != r.Data.IsArchived {
+		if archived == true {
+			return fmt.Errorf("invalid archived: %s is in the archived directory without the `archived` boolean", filename)
+		} else {
+			return fmt.Errorf("invalid archived: %s has `archived` set to true, but isn't in the archived directory", filename)
+		}
+	}
 	return nil
 }

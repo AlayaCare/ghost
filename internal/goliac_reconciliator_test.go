@@ -65,24 +65,28 @@ type ReconciliatorListenerRecorder struct {
 	TeamMemberRemoved map[string][]string
 	TeamDeleted       map[string]bool
 
-	RepositoryCreated     map[string]bool
-	RepositoryTeamAdded   map[string][]string
-	RepositoryTeamUpdated map[string][]string
-	RepositoryTeamRemoved map[string][]string
-	RepositoriesDeleted   map[string]bool
+	RepositoryCreated          map[string]bool
+	RepositoryTeamAdded        map[string][]string
+	RepositoryTeamUpdated      map[string][]string
+	RepositoryTeamRemoved      map[string][]string
+	RepositoriesDeleted        map[string]bool
+	RepositoriesUpdatePrivate  map[string]bool
+	RepositoriesUpdateArchived map[string]bool
 }
 
 func NewReconciliatorListenerRecorder() *ReconciliatorListenerRecorder {
 	r := ReconciliatorListenerRecorder{
-		TeamsCreated:          make(map[string][]string),
-		TeamMemberAdded:       make(map[string][]string),
-		TeamMemberRemoved:     make(map[string][]string),
-		TeamDeleted:           make(map[string]bool),
-		RepositoryCreated:     make(map[string]bool),
-		RepositoryTeamAdded:   make(map[string][]string),
-		RepositoryTeamUpdated: make(map[string][]string),
-		RepositoryTeamRemoved: make(map[string][]string),
-		RepositoriesDeleted:   make(map[string]bool),
+		TeamsCreated:               make(map[string][]string),
+		TeamMemberAdded:            make(map[string][]string),
+		TeamMemberRemoved:          make(map[string][]string),
+		TeamDeleted:                make(map[string]bool),
+		RepositoryCreated:          make(map[string]bool),
+		RepositoryTeamAdded:        make(map[string][]string),
+		RepositoryTeamUpdated:      make(map[string][]string),
+		RepositoryTeamRemoved:      make(map[string][]string),
+		RepositoriesDeleted:        make(map[string]bool),
+		RepositoriesUpdatePrivate:  make(map[string]bool),
+		RepositoriesUpdateArchived: make(map[string]bool),
 	}
 	return &r
 }
@@ -112,6 +116,12 @@ func (r *ReconciliatorListenerRecorder) UpdateRepositoryRemoveTeamAccess(reponam
 }
 func (r *ReconciliatorListenerRecorder) DeleteRepository(reponame string) {
 	r.RepositoriesDeleted[reponame] = true
+}
+func (r *ReconciliatorListenerRecorder) UpdateRepositoryUpdatePrivate(reponame string, private bool) {
+	r.RepositoriesUpdatePrivate[reponame] = true
+}
+func (r *ReconciliatorListenerRecorder) UpdateRepositoryUpdateArchived(reponame string, archived bool) {
+	r.RepositoriesUpdateArchived[reponame] = true
 }
 func (r *ReconciliatorListenerRecorder) Begin() {
 }

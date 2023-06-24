@@ -126,3 +126,13 @@ func (m *MutableGoliacRemoteImpl) UpdateRepositoryRemoveTeamAccess(reponame stri
 func (m *MutableGoliacRemoteImpl) DeleteRepository(reponame string) {
 	delete(m.repositories, reponame)
 }
+func (m *MutableGoliacRemoteImpl) UpdateRepositoryUpdatePrivate(reponame string, private bool) {
+	if r, ok := m.repositories[reponame]; ok {
+		r.IsPrivate = private
+	}
+}
+func (m *MutableGoliacRemoteImpl) UpdateRepositoryUpdateArchived(reponame string, archived bool) {
+	if r, ok := m.repositories[reponame]; ok {
+		r.IsArchived = archived
+	}
+}

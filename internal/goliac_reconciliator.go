@@ -126,7 +126,7 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 	}
 
 	for reponame, lRepo := range local.Repositories() {
-		if _, ok := ghRepos[reponame]; !ok {
+		if rRepo, ok := ghRepos[reponame]; !ok {
 			// deal with non existing repo
 			writers := make([]string, 0)
 			writers = append(writers, lRepo.Data.Writers...)
@@ -137,6 +137,8 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 			r.CreateRepository(dryrun, remote, reponame, reponame, writers, lRepo.Data.Readers, lRepo.Data.IsPublic)
 		} else {
 			// deal with existing repo
+
+			// reconciliate repositories teams members
 
 			localReadMembers := make(map[string]bool)
 			for _, m := range lRepo.Data.Readers {
@@ -215,6 +217,18 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 					// ADD team member
 					r.UpdateRepositoryAddTeamAccess(dryrun, remote, reponame, teamSlug, "WRITE")
 				}
+			}
+
+			// reconciliate repositories public/private
+			if lRepo.Data.IsPublic == rRepo.IsPrivate {
+				// UPDATE private repository
+				r.UpdateRepositoryUpdatePrivate(dryrun, remote, reponame, !lRepo.Data.IsPublic)
+			}
+
+			// reconciliate repositories archived
+			if lRepo.Data.IsArchived != rRepo.IsArchived {
+				// UPDATE archived repository
+				r.UpdateRepositoryUpdateArchived(dryrun, remote, reponame, lRepo.Data.IsArchived)
 			}
 
 			delete(rRepos, reponame)
@@ -309,6 +323,24 @@ func (r *GoliacReconciliatorImpl) DeleteRepository(dryrun bool, remote *MutableG
 	if !dryrun {
 		for _, l := range r.listeners {
 			l.DeleteRepository(reponame)
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdatePrivate(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, private bool) {
+	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_repository_update_private"}).Infof("repositoryname: %s private:%v", reponame, private)
+	remote.UpdateRepositoryUpdatePrivate(reponame, private)
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.UpdateRepositoryUpdatePrivate(reponame, private)
+		}
+	}
+}
+func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdateArchived(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, archived bool) {
+	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_repository_update_private"}).Infof("repositoryname: %s archived:%v", reponame, archived)
+	remote.UpdateRepositoryUpdateArchived(reponame, archived)
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.UpdateRepositoryUpdateArchived(reponame, archived)
 		}
 	}
 }

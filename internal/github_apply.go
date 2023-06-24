@@ -43,6 +43,12 @@ func (g *GithubApplyListener) UpdateRepositoryUpdateTeamAccess(reponame string, 
 func (g *GithubApplyListener) UpdateRepositoryRemoveTeamAccess(reponame string, teamslug string) {
 
 }
+func (g *GithubApplyListener) UpdateRepositoryUpdatePrivate(reponame string, private bool) {
+
+}
+func (g *GithubApplyListener) UpdateRepositoryUpdateArchived(reponame string, archived bool) {
+
+}
 func (g *GithubApplyListener) DeleteRepository(reponame string) {
 	// NOOP: we dont want to delete repositories
 }

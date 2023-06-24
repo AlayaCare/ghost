@@ -69,7 +69,7 @@ metadata:
 		assert.Equal(t, len(warns), 0)
 		assert.NotNil(t, teams)
 
-		repos, errs, warns := ReadRepositories(fs, "teams", teams, map[string]*User{})
+		repos, errs, warns := ReadRepositories(fs, "archived", "teams", teams, map[string]*User{})
 		assert.Equal(t, len(errs), 0)
 		assert.Equal(t, len(warns), 0)
 		assert.NotNil(t, repos)
@@ -97,7 +97,7 @@ metadata:
 		assert.Equal(t, len(warns), 0)
 		assert.NotNil(t, teams)
 
-		_, errs, warns = ReadRepositories(fs, "teams", teams, map[string]*User{})
+		_, errs, warns = ReadRepositories(fs, "archived", "teams", teams, map[string]*User{})
 		assert.Equal(t, len(errs), 1)
 		assert.Equal(t, len(warns), 0)
 	})
@@ -127,7 +127,7 @@ data:
 		assert.Equal(t, len(warns), 0)
 		assert.NotNil(t, teams)
 
-		_, errs, warns = ReadRepositories(fs, "teams", teams, map[string]*User{})
+		_, errs, warns = ReadRepositories(fs, "archived", "teams", teams, map[string]*User{})
 		assert.Equal(t, len(errs), 1)
 		assert.Equal(t, len(warns), 0)
 	})
@@ -157,7 +157,7 @@ data:
 		assert.Equal(t, len(warns), 0)
 		assert.NotNil(t, teams)
 
-		_, errs, warns = ReadRepositories(fs, "teams", teams, map[string]*User{})
+		_, errs, warns = ReadRepositories(fs, "archived", "teams", teams, map[string]*User{})
 		assert.Equal(t, len(errs), 1)
 		assert.Equal(t, len(warns), 0)
 	})
