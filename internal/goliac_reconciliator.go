@@ -88,7 +88,7 @@ func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote *M
 					delete(localMembers, m)
 				}
 			}
-			for m, _ := range localMembers {
+			for m := range localMembers {
 				// ADD team member
 				r.UpdateTeamAddMember(dryrun, remote, slugTeam, m, "member")
 			}
@@ -201,7 +201,7 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 					delete(localReadMembers, teamName)
 				}
 			}
-			for m, _ := range localReadMembers {
+			for m := range localReadMembers {
 				// ADD team member
 				if teamSlug, ok := remote.TeamSlugByName()[m]; ok {
 					r.UpdateRepositoryAddTeamAccess(dryrun, remote, reponame, teamSlug, "READ")
@@ -218,7 +218,7 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 					delete(localWriteMembers, teamName)
 				}
 			}
-			for m, _ := range localWriteMembers {
+			for m := range localWriteMembers {
 				if teamSlug, ok := remote.TeamSlugByName()[m]; ok {
 					// ADD team member
 					r.UpdateRepositoryAddTeamAccess(dryrun, remote, reponame, teamSlug, "WRITE")
@@ -242,7 +242,7 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 	}
 
 	// remaining (GH) teams (aka not found locally)
-	for reponame, _ := range rRepos {
+	for reponame := range rRepos {
 		// DELETE team
 		r.DeleteRepository(dryrun, remote, reponame)
 	}

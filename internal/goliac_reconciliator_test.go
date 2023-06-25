@@ -44,7 +44,7 @@ func (m *GoliacRemoteMock) Load() error {
 }
 func (m *GoliacRemoteMock) TeamSlugByName() map[string]string {
 	slugs := make(map[string]string)
-	for k, _ := range m.teams {
+	for k := range m.teams {
 		slugs[k] = slugify.Make(k)
 	}
 	return slugs

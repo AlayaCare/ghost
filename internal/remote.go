@@ -244,7 +244,7 @@ func (g *GoliacRemoteImpl) Load() error {
 
 	g.teamRepos = make(map[string]map[string]*GithubTeamRepo)
 
-	for teamSlug, _ := range g.teams {
+	for teamSlug := range g.teams {
 		repos, err := g.loadTeamRepos(teamSlug)
 		if err != nil {
 			return err
