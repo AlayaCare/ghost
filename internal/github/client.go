@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -272,17 +273,20 @@ func (client *GitHubClientImpl) CallRestAPI(endpoint string) ([]byte, error) {
  * responseBody, err := client.CallRestAPIWithBody("orgs/my-org/repos", "POST", body)
  */
 func (client *GitHubClientImpl) CallRestAPIWithBody(endpoint, method string, body map[string]interface{}) ([]byte, error) {
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
+	var bodyReader io.Reader
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		bodyReader = bytes.NewBuffer(jsonBody)
 	}
-
-	req, err := http.NewRequest(method, client.gitHubServer+"/"+endpoint, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest(method, client.gitHubServer+"/"+endpoint, bodyReader)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	resp, err := client.httpClient.Do(req)
 	if err != nil {
 		return nil, err

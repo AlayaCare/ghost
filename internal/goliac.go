@@ -46,7 +46,7 @@ func NewGoliacImpl() (Goliac, error) {
 	}
 
 	reconciliator := NewGoliacReconciliatorImpl()
-	ga := NewGithubApplyListener()
+	ga := NewGithubApplyListener(githubClient)
 	reconciliator.AddListener(ga)
 
 	return &GoliacImpl{

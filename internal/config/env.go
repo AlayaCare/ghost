@@ -19,6 +19,9 @@ var Config = struct {
 	GithubAppID             string `env:"GOLIAC_GITHUB_APP_ID" envDefault:""`
 	GithubAppPrivateKeyFile string `env:"GOLIAC_GITHUB_APP_PRIVATE_KEY_FILE" envDefault:"github-app-private-key.pem"`
 
+	// if we have more than `MaxChangesetPerBatch` gituhb changes to apply, we abort
+	MaxChangesetsPerBatch int `env:"GOLIAC_MAX_CHANGESETS_PER_BATCH" envDefault:"50"`
+
 	// goliacGitRepository string `env:"GOLIAC_GIT_REPOSITORY" envDefault:""`
 	// goliacGitBranch     string `env:"GOLIAC_GIT_BRANCH" envDefault:"main"`
 }{}

@@ -129,12 +129,18 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 		if rRepo, ok := ghRepos[reponame]; !ok {
 			// deal with non existing repo
 			writers := make([]string, 0)
-			writers = append(writers, lRepo.Data.Writers...)
+			for _, w := range lRepo.Data.Writers {
+				writers = append(writers, remote.TeamSlugByName()[w])
+			}
 			if lRepo.Owner != nil {
-				writers = append(writers, *lRepo.Owner)
+				writers = append(writers, remote.TeamSlugByName()[*lRepo.Owner])
+			}
+			readers := make([]string, 0)
+			for _, r := range lRepo.Data.Readers {
+				readers = append(readers, remote.TeamSlugByName()[r])
 			}
 			// CREATE team
-			r.CreateRepository(dryrun, remote, reponame, reponame, writers, lRepo.Data.Readers, lRepo.Data.IsPublic)
+			r.CreateRepository(dryrun, remote, reponame, reponame, writers, readers, lRepo.Data.IsPublic)
 		} else {
 			// deal with existing repo
 
