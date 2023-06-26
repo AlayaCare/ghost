@@ -157,6 +157,7 @@ func TestReconciliation(t *testing.T) {
 
 		// 2 members created
 		assert.Equal(t, 2, len(recorder.TeamsCreated["new"]))
+		assert.Equal(t, 1, len(recorder.TeamsCreated["new-owners"]))
 	})
 
 	t.Run("happy path: new team with non english slug", func(t *testing.T) {
@@ -184,6 +185,7 @@ func TestReconciliation(t *testing.T) {
 
 		// 2 members created
 		assert.Equal(t, 2, len(recorder.TeamsCreated["nouveauté"]))
+		assert.Equal(t, 1, len(recorder.TeamsCreated["nouveauté-owners"]))
 	})
 
 	t.Run("happy path: existing team with new members", func(t *testing.T) {
@@ -212,6 +214,12 @@ func TestReconciliation(t *testing.T) {
 			Members: []string{"existing_owner", "existing_member"},
 		}
 		remote.teams["existing"] = existing
+		existingowners := &GithubTeam{
+			Name:    "existing-owners",
+			Slug:    "existing-owners",
+			Members: []string{"existing_owner", "existing_member"},
+		}
+		remote.teams["existing-owners"] = existingowners
 
 		r.Reconciliate(&local, &remote, false)
 
@@ -246,6 +254,13 @@ func TestReconciliation(t *testing.T) {
 			Members: []string{"existing_owner", "existing_member"},
 		}
 		remote.teams["exist-ing"] = existing
+
+		existingowners := &GithubTeam{
+			Name:    "exist ing-owners",
+			Slug:    "exist-ing-owners",
+			Members: []string{"existing_owner", "existing_member"},
+		}
+		remote.teams["exist-ing-owners"] = existingowners
 
 		r.Reconciliate(&local, &remote, false)
 

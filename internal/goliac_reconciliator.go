@@ -94,6 +94,35 @@ func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote *M
 			}
 			delete(rTeams, slugTeam)
 		}
+
+		slugOwnersTeam, ok := remote.TeamSlugByName()[lTeam.Metadata.Name+"-owners"]
+		if !ok {
+			// deal with non existing team
+			// CREATE team
+			r.CreateTeam(dryrun, remote, lTeam.Metadata.Name+"-owners", lTeam.Metadata.Name+"-owners", lTeam.Data.Owners)
+		} else {
+			// deal with existing owners team
+			rOwnersTeam := ghTeams[slugOwnersTeam]
+
+			localOwners := make(map[string]bool)
+			for _, m := range lTeam.Data.Owners {
+				localOwners[m] = true
+			}
+
+			for _, m := range rOwnersTeam.Members {
+				if _, ok := localOwners[m]; !ok {
+					// REMOVE owner team member
+					r.UpdateTeamRemoveMember(dryrun, remote, slugOwnersTeam, m)
+				} else {
+					delete(localOwners, m)
+				}
+			}
+			for m := range localOwners {
+				// ADD owner team member
+				r.UpdateTeamAddMember(dryrun, remote, slugOwnersTeam, m, "member")
+			}
+			delete(rTeams, slugOwnersTeam)
+		}
 	}
 
 	// remaining (GH) teams (aka not found locally)
