@@ -34,9 +34,9 @@ func (m *GoliacLocalMock) ExternalUsers() map[string]*entity.User {
 }
 
 type GoliacRemoteMock struct {
-	teams      map[string]*GithubTeam
+	teams      map[string]*GithubTeam // key is the slug team
 	repos      map[string]*GithubRepository
-	teamsrepos map[string]map[string]*GithubTeamRepo
+	teamsrepos map[string]map[string]*GithubTeamRepo // key is the slug team
 }
 
 func (m *GoliacRemoteMock) Load() error {
@@ -44,8 +44,8 @@ func (m *GoliacRemoteMock) Load() error {
 }
 func (m *GoliacRemoteMock) TeamSlugByName() map[string]string {
 	slugs := make(map[string]string)
-	for k := range m.teams {
-		slugs[k] = slugify.Make(k)
+	for _, v := range m.teams {
+		slugs[v.Name] = slugify.Make(v.Name)
 	}
 	return slugs
 }
@@ -159,6 +159,33 @@ func TestReconciliation(t *testing.T) {
 		assert.Equal(t, 2, len(recorder.TeamsCreated["new"]))
 	})
 
+	t.Run("happy path: new team with non english slug", func(t *testing.T) {
+		r := NewGoliacReconciliatorImpl()
+		recorder := NewReconciliatorListenerRecorder()
+		r.AddListener(recorder)
+
+		local := GoliacLocalMock{
+			teams: make(map[string]*entity.Team),
+			repos: make(map[string]*entity.Repository),
+		}
+		newTeam := &entity.Team{}
+		newTeam.Metadata.Name = "nouveauté"
+		newTeam.Data.Owners = []string{"new_owner"}
+		newTeam.Data.Members = []string{"new_member"}
+		local.teams["nouveauté"] = newTeam
+
+		remote := GoliacRemoteMock{
+			teams:      make(map[string]*GithubTeam),
+			repos:      make(map[string]*GithubRepository),
+			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
+		}
+
+		r.Reconciliate(&local, &remote, false)
+
+		// 2 members created
+		assert.Equal(t, 2, len(recorder.TeamsCreated["nouveauté"]))
+	})
+
 	t.Run("happy path: existing team with new members", func(t *testing.T) {
 		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
@@ -191,6 +218,41 @@ func TestReconciliation(t *testing.T) {
 		// 1 members added
 		assert.Equal(t, 0, len(recorder.TeamsCreated))
 		assert.Equal(t, 1, len(recorder.TeamMemberAdded["existing"]))
+	})
+
+	t.Run("happy path: existing team with non english slug with new members", func(t *testing.T) {
+		r := NewGoliacReconciliatorImpl()
+		recorder := NewReconciliatorListenerRecorder()
+		r.AddListener(recorder)
+
+		local := GoliacLocalMock{
+			teams: make(map[string]*entity.Team),
+			repos: make(map[string]*entity.Repository),
+		}
+		existingTeam := &entity.Team{}
+		existingTeam.Metadata.Name = "exist ing"
+		existingTeam.Data.Owners = []string{"existing_owner", "existing_owner2"}
+		existingTeam.Data.Members = []string{"existing_member"}
+		local.teams["exist ing"] = existingTeam
+
+		remote := GoliacRemoteMock{
+			teams:      make(map[string]*GithubTeam),
+			repos:      make(map[string]*GithubRepository),
+			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
+		}
+		existing := &GithubTeam{
+			Name:    "exist ing",
+			Slug:    "exist-ing",
+			Members: []string{"existing_owner", "existing_member"},
+		}
+		remote.teams["exist-ing"] = existing
+
+		r.Reconciliate(&local, &remote, false)
+
+		// 1 members added
+		assert.Equal(t, "exist-ing", remote.TeamSlugByName()["exist ing"])
+		assert.Equal(t, 0, len(recorder.TeamsCreated))
+		assert.Equal(t, 1, len(recorder.TeamMemberAdded["exist-ing"]))
 	})
 
 	t.Run("happy path: removed team", func(t *testing.T) {

@@ -88,13 +88,14 @@ func (m *MutableGoliacRemoteImpl) UpdateTeamRemoveMember(teamslug string, userna
 			}
 		}
 	}
-
 }
 func (m *MutableGoliacRemoteImpl) DeleteTeam(teamslug string) {
-	teamname := m.teams[teamslug].Name
-	delete(m.teams, teamslug)
-	delete(m.teamSlugByName, teamname)
-	delete(m.teamRepos, teamslug)
+	if t, ok := m.teams[teamslug]; ok {
+		teamname := t.Name
+		delete(m.teams, teamslug)
+		delete(m.teamSlugByName, teamname)
+		delete(m.teamRepos, teamslug)
+	}
 }
 func (m *MutableGoliacRemoteImpl) CreateRepository(reponame string, descrition string, writers []string, readers []string, public bool) {
 	r := GithubRepository{
