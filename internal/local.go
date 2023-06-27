@@ -6,13 +6,17 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"time"
 
+	"github.com/Alayacare/goliac/internal/config"
 	"github.com/Alayacare/goliac/internal/entity"
+	"github.com/Alayacare/goliac/internal/slugify"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 )
 
@@ -22,18 +26,19 @@ import (
  * and mount it in memory
  */
 type GoliacLocal interface {
+	Clone(accesstoken, repositoryUrl, branch string) error
 	// Load and Validate from a github repository
-	LoadAndValidate(accesstoken, repositoryUrl, branch string) ([]error, []error)
+	LoadAndValidate() ([]error, []error)
+	UpdateAndCommitCodeOwners(dryrun bool) error
+	Close()
+
 	// Load and Validate from a local directory
 	LoadAndValidateLocal(fs afero.Fs, path string) ([]error, []error)
+
 	Teams() map[string]*entity.Team
 	Repositories() map[string]*entity.Repository
 	Users() map[string]*entity.User
 	ExternalUsers() map[string]*entity.User
-
-	GetCodeOwnersFileContent() ([]byte, error)
-	SaveCodeOwnersFileContent([]byte) error
-	Close()
 }
 
 type GoliacLocalImpl struct {
@@ -50,6 +55,7 @@ func NewGoliacLocalImpl() GoliacLocal {
 		repositories:  map[string]*entity.Repository{},
 		users:         map[string]*entity.User{},
 		externalUsers: map[string]*entity.User{},
+		repo:          nil,
 	}
 }
 
@@ -69,89 +75,14 @@ func (g *GoliacLocalImpl) ExternalUsers() map[string]*entity.User {
 	return g.externalUsers
 }
 
-func (g *GoliacLocalImpl) Close() {
+func (g *GoliacLocalImpl) Clone(accesstoken, repositoryUrl, branch string) error {
 	if g.repo != nil {
-		w, err := g.repo.Worktree()
-		if err == nil {
-			os.RemoveAll(w.Filesystem.Root())
-		}
+		g.Close()
 	}
-	g.repo = nil
-}
-
-func (g *GoliacLocalImpl) GetCodeOwnersFileContent() ([]byte, error) {
-	if g.repo == nil {
-		return nil, fmt.Errorf("git repository not cloned")
-	}
-	w, err := g.repo.Worktree()
-	if err != nil {
-		return nil, err
-	}
-
-	file, err := os.Open(path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS"))
-	defer file.Close()
-
-	content, err := ioutil.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	return content, nil
-
-}
-func (g *GoliacLocalImpl) SaveCodeOwnersFileContent(content []byte) error {
-	if g.repo == nil {
-		return fmt.Errorf("git repository not cloned")
-	}
-
-	w, err := g.repo.Worktree()
-	if err != nil {
-		return err
-	}
-
-	ioutil.WriteFile(path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS"), content, 0644)
-
-	_, err = w.Add(path.Join(".github", "CODEOWNERS"))
-	if err != nil {
-		return err
-	}
-
-	commit, err := w.Commit("Added example.txt", &git.CommitOptions{
-		Author: &object.Signature{
-			Name: "Goliac",
-			//			Email: "goliac@alayacare.com",
-			When: time.Now(),
-		},
-	})
-
-	if err != nil {
-		return err
-	}
-
-	_, err = g.repo.CommitObject(commit)
-	if err != nil {
-		return err
-	}
-
-	err = g.repo.Push(&git.PushOptions{})
-
-	return err
-}
-
-/*
- * Load the goliac organization from Github
- * - clone the repository
- * - read the organization files
- * - validate the organization
- * Parameters:
- * - repositoryUrl: the URL of the repository to clone
- * - branch: the branch to checkout
- */
-func (g *GoliacLocalImpl) LoadAndValidate(accesstoken, repositoryUrl, branch string) ([]error, []error) {
 	// create a temp directory
 	tmpDir, err := ioutil.TempDir("", "goliac")
 	if err != nil {
-		return []error{err}, []error{}
+		return err
 	}
 
 	repo, err := git.PlainClone(tmpDir, false, &git.CloneOptions{
@@ -162,27 +93,133 @@ func (g *GoliacLocalImpl) LoadAndValidate(accesstoken, repositoryUrl, branch str
 		},
 	})
 	if err != nil {
-		return []error{err}, []error{}
+		return err
 	}
 	g.repo = repo
 
 	// checkout the branch
-	w, err := repo.Worktree()
+	w, err := g.repo.Worktree()
 	if err != nil {
-		return []error{err}, []error{}
+		return err
 	}
 	err = w.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.ReferenceName("refs/remotes/origin/" + branch),
 	})
 	if err != nil {
-		return []error{err}, []error{}
+		return err
+	}
+
+	return err
+}
+
+func (g *GoliacLocalImpl) Close() {
+	if g.repo != nil {
+		w, err := g.repo.Worktree()
+		if err == nil {
+			os.RemoveAll(w.Filesystem.Root())
+		}
+	}
+	g.repo = nil
+}
+
+func (g *GoliacLocalImpl) codeowners_regenerate() string {
+	codeowners := "# DO NOT MODIFY THIS FILE MANUALLY\n"
+
+	teamsnames := make([]string, 0)
+	for _, t := range g.teams {
+		teamsnames = append(teamsnames, t.Metadata.Name)
+	}
+	sort.Sort(sort.StringSlice(teamsnames))
+
+	for _, t := range teamsnames {
+		codeowners += fmt.Sprintf("/org/%s @%s/%s\n", t, config.Config.GithubAppOrganization, slugify.Make(t))
+	}
+
+	return codeowners
+}
+
+/*
+ * UpdateAndCommitCodeOwners will collects all teams definition to update the .github/CODEOWNERS file
+ * cf https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+ */
+func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
+	if g.repo == nil {
+		return fmt.Errorf("git repository not cloned")
+	}
+	w, err := g.repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	file, err := os.Open(path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS"))
+	defer file.Close()
+
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+
+	newContent := g.codeowners_regenerate()
+
+	if string(content) != newContent {
+		logrus.Info(".github/CODEOWNERS needs to be regenerated")
+		if dryrun {
+			return nil
+		}
+
+		ioutil.WriteFile(path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS"), []byte(newContent), 0644)
+
+		_, err = w.Add(path.Join(".github", "CODEOWNERS"))
+		if err != nil {
+			return err
+		}
+
+		commit, err := w.Commit("Added example.txt", &git.CommitOptions{
+			Author: &object.Signature{
+				Name:  "Goliac",
+				Email: config.Config.GoliacEmail,
+				When:  time.Now(),
+			},
+		})
+
+		if err != nil {
+			return err
+		}
+
+		_, err = g.repo.CommitObject(commit)
+		if err != nil {
+			return err
+		}
+
+		err = g.repo.Push(&git.PushOptions{})
+
+		return err
+	}
+	return nil
+}
+
+/*
+ * Load the goliac organization from Github (after the repository has been cloned)
+ * - read the organization files
+ * - validate the organization
+ * Parameters:
+ * - repositoryUrl: the URL of the repository to clone
+ * - branch: the branch to checkout
+ */
+func (g *GoliacLocalImpl) LoadAndValidate() ([]error, []error) {
+	if g.repo == nil {
+		return []error{fmt.Errorf("The repository has not been cloned. Did you called .Clone()?")}, []error{}
 	}
 
 	// read the organization files
-
 	fs := afero.NewOsFs()
 
-	errs, warns := g.LoadAndValidateLocal(fs, tmpDir)
+	w, err := g.repo.Worktree()
+	if err != nil {
+		return []error{err}, []error{}
+	}
+	rootDir := w.Filesystem.Root()
+	errs, warns := g.LoadAndValidateLocal(fs, rootDir)
 
 	return errs, warns
 }

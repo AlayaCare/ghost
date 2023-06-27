@@ -34,7 +34,6 @@ type GoliacImpl struct {
 	remote        GoliacRemote
 	githubClient  github.GitHubClient
 	reconciliator GoliacReconciliator
-	codeowners    CodeOwnersGenerator
 }
 
 func NewGoliacImpl() (Goliac, error) {
@@ -58,7 +57,6 @@ func NewGoliacImpl() (Goliac, error) {
 		githubClient:  githubClient,
 		remote:        NewGoliacRemoteImpl(githubClient),
 		reconciliator: reconciliator,
-		codeowners:    *NewCodeOwnersGenerator(),
 	}, nil
 }
 
@@ -71,7 +69,11 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 			return err
 		}
 
-		errs, warns = g.local.LoadAndValidate(accessToken, repositoryUrl, branch)
+		err = g.local.Clone(accessToken, repositoryUrl, branch)
+		if err != nil {
+			return err
+		}
+		errs, warns = g.local.LoadAndValidate()
 	} else {
 		// Local
 		fs := afero.NewOsFs()
@@ -96,7 +98,7 @@ func (g *GoliacImpl) ApplyToGithub(dryrun bool) error {
 	if err != nil {
 		return err
 	}
-	err = g.codeowners.UpdateCodeOwners(g.local, dryrun)
+	err = g.local.UpdateAndCommitCodeOwners(dryrun)
 	return err
 }
 

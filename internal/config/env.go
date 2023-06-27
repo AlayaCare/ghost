@@ -18,6 +18,7 @@ var Config = struct {
 	GithubAppOrganization   string `env:"GOLIAC_GITHUB_APP_ORGANIZATION" envDefault:""`
 	GithubAppID             string `env:"GOLIAC_GITHUB_APP_ID" envDefault:""`
 	GithubAppPrivateKeyFile string `env:"GOLIAC_GITHUB_APP_PRIVATE_KEY_FILE" envDefault:"github-app-private-key.pem"`
+	GoliacEmail             string `env:"GOLIAC_EMAIL" envDefault:"goliac@alayacare.com"`
 
 	// if we have more than `MaxChangesetPerBatch` gituhb changes to apply, we abort
 	MaxChangesetsPerBatch int `env:"GOLIAC_MAX_CHANGESETS_PER_BATCH" envDefault:"50"`

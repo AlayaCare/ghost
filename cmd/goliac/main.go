@@ -28,6 +28,7 @@ https://github.com/...`,
 				logrus.Fatalf("failed to create goliac: %s", err)
 			}
 			err = goliac.LoadAndValidateGoliacOrganization(repo, branch)
+			defer goliac.Close()
 			if err != nil {
 				logrus.Fatalf("failed to verify: %s", err)
 			}
@@ -52,6 +53,7 @@ https://github.com/...`,
 				logrus.Fatalf("failed to create goliac: %s", err)
 			}
 			err = goliac.LoadAndValidateGoliacOrganization(repo, branch)
+			defer goliac.Close()
 			if err != nil {
 				logrus.Fatalf("failed to load and validate: %s", err)
 			}
@@ -79,6 +81,7 @@ https://github.com/...`,
 				logrus.Fatalf("failed to create goliac: %s", err)
 			}
 			err = goliac.LoadAndValidateGoliacOrganization(repo, branch)
+			defer goliac.Close()
 			if err != nil {
 				logrus.Fatalf("failed to load and validate: %s", err)
 			}

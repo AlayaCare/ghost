@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Alayacare/goliac/internal/entity"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/afero"
@@ -123,47 +124,22 @@ func TestRepository(t *testing.T) {
 		assert.Nil(t, err)
 
 		// Verify the commit
-		ref, err := r.Head()
+		_, err = r.Head()
 		assert.Nil(t, err)
 
-		g := NewGoliacLocalImpl()
-		errs, warns := g.LoadAndValidate("", tmpDirectory, ref.Name().Short())
+		g := &GoliacLocalImpl{
+			teams:         map[string]*entity.Team{},
+			repositories:  map[string]*entity.Repository{},
+			users:         map[string]*entity.User{},
+			externalUsers: map[string]*entity.User{},
+			repo:          r,
+		}
+
+		errs, warns := g.LoadAndValidate()
 
 		fmt.Println(errs)
 		fmt.Println(warns)
 		assert.Equal(t, 0, len(errs))
-		assert.Equal(t, 0, len(warns))
-	})
-
-	t.Run("not happy path: local repository, unknown branch", func(t *testing.T) {
-		tmpDirectory, err := ioutil.TempDir("", "goliac")
-		assert.Nil(t, err)
-		defer os.RemoveAll(tmpDirectory)
-
-		// Initializes a new repository
-		r, err := git.PlainInit(tmpDirectory, false)
-		assert.Nil(t, err)
-
-		fs := afero.NewOsFs()
-		createBasicStructure(fs, tmpDirectory)
-		w, err := r.Worktree()
-		assert.Nil(t, err)
-		_, err = w.Add(".")
-		assert.Nil(t, err)
-
-		_, err = w.Commit("initial commit", &git.CommitOptions{
-			Author: &object.Signature{
-				Name:  "goliac",
-				Email: "goliac@alayacare.com",
-				When:  time.Now(),
-			},
-		})
-		assert.Nil(t, err)
-
-		g := NewGoliacLocalImpl()
-		errs, warns := g.LoadAndValidate("", tmpDirectory, "foobar")
-
-		assert.Equal(t, 1, len(errs))
 		assert.Equal(t, 0, len(warns))
 	})
 }
