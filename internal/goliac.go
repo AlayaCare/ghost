@@ -22,6 +22,9 @@ type Goliac interface {
 	// You need to call LoadAndValidategoliacOrganization before calling this function
 	ApplyToGithub(dryrun bool) error
 
+	// to close the clone git repository (if you called LoadAndValidateGoliacOrganization)
+	Close()
+
 	// List Repsotiories that are managed by goliac
 	ListManagedRepositories() ([]*entity.Repository, error)
 }
@@ -31,6 +34,7 @@ type GoliacImpl struct {
 	remote        GoliacRemote
 	githubClient  github.GitHubClient
 	reconciliator GoliacReconciliator
+	codeowners    CodeOwnersGenerator
 }
 
 func NewGoliacImpl() (Goliac, error) {
@@ -54,6 +58,7 @@ func NewGoliacImpl() (Goliac, error) {
 		githubClient:  githubClient,
 		remote:        NewGoliacRemoteImpl(githubClient),
 		reconciliator: reconciliator,
+		codeowners:    *NewCodeOwnersGenerator(),
 	}, nil
 }
 
@@ -70,7 +75,7 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 	} else {
 		// Local
 		fs := afero.NewOsFs()
-		g.local.LoadAndValidateLocal(fs, repositoryUrl)
+		errs, warns = g.local.LoadAndValidateLocal(fs, repositoryUrl)
 	}
 
 	for _, warn := range warns {
@@ -88,7 +93,15 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 
 func (g *GoliacImpl) ApplyToGithub(dryrun bool) error {
 	err := g.reconciliator.Reconciliate(g.local, g.remote, dryrun)
+	if err != nil {
+		return err
+	}
+	err = g.codeowners.UpdateCodeOwners(g.local, dryrun)
 	return err
+}
+
+func (g *GoliacImpl) Close() {
+	g.local.Close()
 }
 
 // List Repsotiories that are managed by goliac

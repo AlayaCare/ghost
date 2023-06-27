@@ -32,6 +32,15 @@ func (m *GoliacLocalMock) Users() map[string]*entity.User {
 func (m *GoliacLocalMock) ExternalUsers() map[string]*entity.User {
 	return nil
 }
+func (m *GoliacLocalMock) GetCodeOwnersFileContent() ([]byte, error) {
+	return nil, nil
+}
+func (m *GoliacLocalMock) SaveCodeOwnersFileContent([]byte) error {
+	return nil
+}
+func (m *GoliacLocalMock) Close() {
+
+}
 
 type GoliacRemoteMock struct {
 	teams      map[string]*GithubTeam // key is the slug team

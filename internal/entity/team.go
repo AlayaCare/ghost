@@ -3,6 +3,7 @@ package entity
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
@@ -94,6 +95,10 @@ func (t *Team) Validate(dirname string, users map[string]*User) (error, []error)
 
 	if t.Metadata.Name == "" {
 		return fmt.Errorf("metadata.name is empty for team filename %s", dirname), warnings
+	}
+
+	if strings.HasSuffix(t.Metadata.Name, "-owners") {
+		return fmt.Errorf("metadata.name cannot finish with '-owners' for team filename %s. It is a reserved suffix", dirname), warnings
 	}
 
 	teamname := filepath.Base(dirname)

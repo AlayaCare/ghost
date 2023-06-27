@@ -1,13 +1,17 @@
 package internal
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/Alayacare/goliac/internal/entity"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/afero"
 )
@@ -26,6 +30,10 @@ type GoliacLocal interface {
 	Repositories() map[string]*entity.Repository
 	Users() map[string]*entity.User
 	ExternalUsers() map[string]*entity.User
+
+	GetCodeOwnersFileContent() ([]byte, error)
+	SaveCodeOwnersFileContent([]byte) error
+	Close()
 }
 
 type GoliacLocalImpl struct {
@@ -33,6 +41,7 @@ type GoliacLocalImpl struct {
 	repositories  map[string]*entity.Repository
 	users         map[string]*entity.User
 	externalUsers map[string]*entity.User
+	repo          *git.Repository
 }
 
 func NewGoliacLocalImpl() GoliacLocal {
@@ -60,6 +69,75 @@ func (g *GoliacLocalImpl) ExternalUsers() map[string]*entity.User {
 	return g.externalUsers
 }
 
+func (g *GoliacLocalImpl) Close() {
+	if g.repo != nil {
+		w, err := g.repo.Worktree()
+		if err == nil {
+			os.RemoveAll(w.Filesystem.Root())
+		}
+	}
+	g.repo = nil
+}
+
+func (g *GoliacLocalImpl) GetCodeOwnersFileContent() ([]byte, error) {
+	if g.repo == nil {
+		return nil, fmt.Errorf("git repository not cloned")
+	}
+	w, err := g.repo.Worktree()
+	if err != nil {
+		return nil, err
+	}
+
+	file, err := os.Open(path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS"))
+	defer file.Close()
+
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	return content, nil
+
+}
+func (g *GoliacLocalImpl) SaveCodeOwnersFileContent(content []byte) error {
+	if g.repo == nil {
+		return fmt.Errorf("git repository not cloned")
+	}
+
+	w, err := g.repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	ioutil.WriteFile(path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS"), content, 0644)
+
+	_, err = w.Add(path.Join(".github", "CODEOWNERS"))
+	if err != nil {
+		return err
+	}
+
+	commit, err := w.Commit("Added example.txt", &git.CommitOptions{
+		Author: &object.Signature{
+			Name: "Goliac",
+			//			Email: "goliac@alayacare.com",
+			When: time.Now(),
+		},
+	})
+
+	if err != nil {
+		return err
+	}
+
+	_, err = g.repo.CommitObject(commit)
+	if err != nil {
+		return err
+	}
+
+	err = g.repo.Push(&git.PushOptions{})
+
+	return err
+}
+
 /*
  * Load the goliac organization from Github
  * - clone the repository
@@ -75,7 +153,6 @@ func (g *GoliacLocalImpl) LoadAndValidate(accesstoken, repositoryUrl, branch str
 	if err != nil {
 		return []error{err}, []error{}
 	}
-	defer os.RemoveAll(tmpDir) // clean up
 
 	repo, err := git.PlainClone(tmpDir, false, &git.CloneOptions{
 		URL: repositoryUrl,
@@ -87,6 +164,7 @@ func (g *GoliacLocalImpl) LoadAndValidate(accesstoken, repositoryUrl, branch str
 	if err != nil {
 		return []error{err}, []error{}
 	}
+	g.repo = repo
 
 	// checkout the branch
 	w, err := repo.Worktree()
