@@ -104,3 +104,20 @@ func (u *User) Validate(filename string) error {
 
 	return nil
 }
+
+func (u *User) Equals(a *User) bool {
+	if u.ApiVersion != a.ApiVersion {
+		return false
+	}
+	if u.Kind != a.Kind {
+		return false
+	}
+	if u.Metadata.Name != a.Metadata.Name {
+		return false
+	}
+	if u.Data.GithubID != a.Data.GithubID {
+		return false
+	}
+
+	return true
+}

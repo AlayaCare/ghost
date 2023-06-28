@@ -23,6 +23,7 @@ var Config = struct {
 	// if we have more than `MaxChangesetPerBatch` gituhb changes to apply, we abort
 	MaxChangesetsPerBatch int `env:"GOLIAC_MAX_CHANGESETS_PER_BATCH" envDefault:"50"`
 
+	UserSyncPlugin string `env:"GOLIAC_USER_SYNC_PLUGIN" envDefault:"noop"`
 	// goliacGitRepository string `env:"GOLIAC_GIT_REPOSITORY" envDefault:""`
 	// goliacGitBranch     string `env:"GOLIAC_GIT_BRANCH" envDefault:"main"`
 }{}

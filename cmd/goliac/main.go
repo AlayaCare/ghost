@@ -93,9 +93,9 @@ https://github.com/...`,
 	}
 
 	postSyncUsersCmd := &cobra.Command{
-		Use:   "postsyncusers [repository] [branch]",
-		Short: "Update and commit teams definition",
-		Long:  `After updating the users list, you must call this command, to update and commit teams definition`,
+		Use:   "syncusers [repository] [branch]",
+		Short: "Update and commit users and teams definition",
+		Long:  `This command will use a user sync plugin to adjust users and team yaml definition, and commit them`,
 		Run: func(cmd *cobra.Command, args []string) {
 			repo := args[0]
 			branch := ""
@@ -106,7 +106,7 @@ https://github.com/...`,
 			if err != nil {
 				logrus.Fatalf("failed to create goliac: %s", err)
 			}
-			err = goliac.PostUsersChanged(repo, branch)
+			err = goliac.UsersUpdate(repo, branch)
 			defer goliac.Close()
 			if err != nil {
 				logrus.Fatalf("failed to update and commit teams: %s", err)

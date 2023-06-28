@@ -5,6 +5,7 @@ import (
 
 	"github.com/Alayacare/goliac/internal/entity"
 	"github.com/Alayacare/goliac/internal/slugify"
+	"github.com/Alayacare/goliac/internal/usersync"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 )
@@ -38,7 +39,7 @@ func (m *GoliacLocalMock) ExternalUsers() map[string]*entity.User {
 func (m *GoliacLocalMock) UpdateAndCommitCodeOwners(dryrun bool) error {
 	return nil
 }
-func (m *GoliacLocalMock) LoadUpdateAndCommitTeams(dryrun bool) error {
+func (m *GoliacLocalMock) SyncUsersAndTeams(plugin usersync.UserSyncPlugin, dryrun bool) error {
 	return nil
 }
 func (m *GoliacLocalMock) Close() {

@@ -7,6 +7,7 @@ import (
 	"github.com/Alayacare/goliac/internal/config"
 	"github.com/Alayacare/goliac/internal/entity"
 	"github.com/Alayacare/goliac/internal/github"
+	"github.com/Alayacare/goliac/internal/usersync"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 )
@@ -23,13 +24,10 @@ type Goliac interface {
 	ApplyToGithub(dryrun bool) error
 
 	// You dont need to call LoadAndValidategoliacOrganization before calling this function
-	PostUsersChanged(repositoryUrl, branch string) error
+	UsersUpdate(repositoryUrl, branch string) error
 
 	// to close the clone git repository (if you called LoadAndValidateGoliacOrganization)
 	Close()
-
-	// List Repsotiories that are managed by goliac
-	ListManagedRepositories() ([]*entity.Repository, error)
 }
 
 type GoliacImpl struct {
@@ -105,7 +103,7 @@ func (g *GoliacImpl) ApplyToGithub(dryrun bool) error {
 	return err
 }
 
-func (g *GoliacImpl) PostUsersChanged(repositoryUrl, branch string) error {
+func (g *GoliacImpl) UsersUpdate(repositoryUrl, branch string) error {
 	accessToken, err := g.githubClient.GetAccessToken()
 	if err != nil {
 		return err
@@ -116,15 +114,15 @@ func (g *GoliacImpl) PostUsersChanged(repositoryUrl, branch string) error {
 		return err
 	}
 
-	err = g.local.LoadUpdateAndCommitTeams(false)
+	userplugin, found := usersync.GetUserSyncPlugin(config.Config.UserSyncPlugin)
+	if found == false {
+		return fmt.Errorf("User Sync Plugin %s not found", config.Config.UserSyncPlugin)
+	}
+
+	err = g.local.SyncUsersAndTeams(userplugin, false)
 	return err
 }
 
 func (g *GoliacImpl) Close() {
 	g.local.Close()
-}
-
-// List Repsotiories that are managed by goliac
-func (g *GoliacImpl) ListManagedRepositories() ([]*entity.Repository, error) {
-	return nil, nil
 }

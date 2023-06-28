@@ -12,12 +12,14 @@ import (
 	"github.com/Alayacare/goliac/internal/config"
 	"github.com/Alayacare/goliac/internal/entity"
 	"github.com/Alayacare/goliac/internal/slugify"
+	"github.com/Alayacare/goliac/internal/usersync"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
+	"gopkg.in/yaml.v3"
 )
 
 /*
@@ -31,16 +33,16 @@ type GoliacLocal interface {
 	LoadAndValidate() ([]error, []entity.Warning)
 	// whenever someone create/delete a team, we must update the github CODEOWNERS
 	UpdateAndCommitCodeOwners(dryrun bool) error
-	// whenever the users list has been changed, we must update and commit team's definitions
-	LoadUpdateAndCommitTeams(dryrun bool) error
+	// whenever the users list is changing, reload users and teams, and commit them
+	SyncUsersAndTeams(plugin usersync.UserSyncPlugin, dryrun bool) error
 	Close()
 
 	// Load and Validate from a local directory
 	LoadAndValidateLocal(fs afero.Fs, path string) ([]error, []entity.Warning)
 
-	Teams() map[string]*entity.Team
-	Repositories() map[string]*entity.Repository
-	Users() map[string]*entity.User
+	Teams() map[string]*entity.Team              // slugname, team definition
+	Repositories() map[string]*entity.Repository // reponame, repo definition
+	Users() map[string]*entity.User              // github username, user definition
 	ExternalUsers() map[string]*entity.User
 }
 
@@ -201,7 +203,7 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
 	return nil
 }
 
-func (g *GoliacLocalImpl) LoadUpdateAndCommitTeams(dryrun bool) error {
+func (g *GoliacLocalImpl) SyncUsersAndTeams(userplugin usersync.UserSyncPlugin, dryrun bool) error {
 	if g.repo == nil {
 		return fmt.Errorf("git repository not cloned")
 	}
@@ -213,6 +215,59 @@ func (g *GoliacLocalImpl) LoadUpdateAndCommitTeams(dryrun bool) error {
 	// read the organization files
 	fs := afero.NewOsFs()
 	rootDir := w.Filesystem.Root()
+
+	//
+	// let's update org users
+	//
+
+	// Parse all the users in the <orgDirectory>/org-users directory
+	orgUsers, errs, _ := entity.ReadUserDirectory(fs, filepath.Join(rootDir, "users", "org"))
+	if len(errs) > 0 {
+		return fmt.Errorf("cannot load org users (for example: %v)", errs[0])
+	}
+
+	// use usersync to update the users
+	newOrgUsers := userplugin.UpdateUsers(orgUsers)
+
+	// write back to disk
+	userchanged := false
+	for username, user := range orgUsers {
+		if newuser, ok := newOrgUsers[username]; !ok {
+			// deleted user
+			w.Remove(filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
+			fs.Remove(filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
+			userchanged = true
+		} else {
+			// check if user changed
+			if !newuser.Equals(user) {
+				// changed user
+				newContent, err := yaml.Marshal(newuser)
+				if err != nil {
+					return err
+				}
+				afero.WriteFile(fs, filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)), newContent, 0644)
+				w.Add(filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
+				userchanged = true
+			}
+
+			delete(newOrgUsers, username)
+		}
+	}
+	for username, user := range newOrgUsers {
+		// new user
+		newContent, err := yaml.Marshal(user)
+		if err != nil {
+			return err
+		}
+		afero.WriteFile(fs, filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)), newContent, 0644)
+		w.Add(filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
+		userchanged = true
+	}
+
+	//
+	// let's update teams
+	//
+
 	errors, _ := g.loadUsers(fs, rootDir)
 	if len(errors) > 0 {
 		return fmt.Errorf("cannot read users (for example: %v)", errors[0])
@@ -223,11 +278,7 @@ func (g *GoliacLocalImpl) LoadUpdateAndCommitTeams(dryrun bool) error {
 		return err
 	}
 
-	if len(teamschanged) > 0 {
-		logrus.Info("some teams must be regenerated")
-		if dryrun {
-			return nil
-		}
+	if len(teamschanged) > 0 || userchanged {
 
 		for _, t := range teamschanged {
 
@@ -235,6 +286,11 @@ func (g *GoliacLocalImpl) LoadUpdateAndCommitTeams(dryrun bool) error {
 			if err != nil {
 				return err
 			}
+		}
+
+		logrus.Info("some users and/or teams must be commited")
+		if dryrun {
+			return nil
 		}
 
 		commit, err := w.Commit("update teams", &git.CommitOptions{
