@@ -17,10 +17,10 @@ type GoliacLocalMock struct {
 func (m *GoliacLocalMock) Clone(accesstoken, repositoryUrl, branch string) error {
 	return nil
 }
-func (m *GoliacLocalMock) LoadAndValidate() ([]error, []error) {
+func (m *GoliacLocalMock) LoadAndValidate() ([]error, []entity.Warning) {
 	return nil, nil
 }
-func (m *GoliacLocalMock) LoadAndValidateLocal(fs afero.Fs, path string) ([]error, []error) {
+func (m *GoliacLocalMock) LoadAndValidateLocal(fs afero.Fs, path string) ([]error, []entity.Warning) {
 	return nil, nil
 }
 func (m *GoliacLocalMock) Teams() map[string]*entity.Team {
@@ -36,6 +36,9 @@ func (m *GoliacLocalMock) ExternalUsers() map[string]*entity.User {
 	return nil
 }
 func (m *GoliacLocalMock) UpdateAndCommitCodeOwners(dryrun bool) error {
+	return nil
+}
+func (m *GoliacLocalMock) LoadUpdateAndCommitTeams(dryrun bool) error {
 	return nil
 }
 func (m *GoliacLocalMock) Close() {

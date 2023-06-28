@@ -92,6 +92,28 @@ https://github.com/...`,
 		},
 	}
 
+	postSyncUsersCmd := &cobra.Command{
+		Use:   "postsyncusers [repository] [branch]",
+		Short: "Update and commit teams definition",
+		Long:  `After updating the users list, you must call this command, to update and commit teams definition`,
+		Run: func(cmd *cobra.Command, args []string) {
+			repo := args[0]
+			branch := ""
+			if len(args) > 1 {
+				branch = args[1]
+			}
+			goliac, err := internal.NewGoliacImpl()
+			if err != nil {
+				logrus.Fatalf("failed to create goliac: %s", err)
+			}
+			err = goliac.PostUsersChanged(repo, branch)
+			defer goliac.Close()
+			if err != nil {
+				logrus.Fatalf("failed to update and commit teams: %s", err)
+			}
+		},
+	}
+
 	rootCmd := &cobra.Command{
 		Use:   "goliac",
 		Short: "A CLI for the goliac organization",
@@ -103,6 +125,7 @@ Either local directory, or remote git repository`,
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(planCmd)
 	rootCmd.AddCommand(applyCmd)
+	rootCmd.AddCommand(postSyncUsersCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

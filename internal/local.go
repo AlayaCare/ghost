@@ -28,12 +28,15 @@ import (
 type GoliacLocal interface {
 	Clone(accesstoken, repositoryUrl, branch string) error
 	// Load and Validate from a github repository
-	LoadAndValidate() ([]error, []error)
+	LoadAndValidate() ([]error, []entity.Warning)
+	// whenever someone create/delete a team, we must update the github CODEOWNERS
 	UpdateAndCommitCodeOwners(dryrun bool) error
+	// whenever the users list has been changed, we must update and commit team's definitions
+	LoadUpdateAndCommitTeams(dryrun bool) error
 	Close()
 
 	// Load and Validate from a local directory
-	LoadAndValidateLocal(fs afero.Fs, path string) ([]error, []error)
+	LoadAndValidateLocal(fs afero.Fs, path string) ([]error, []entity.Warning)
 
 	Teams() map[string]*entity.Team
 	Repositories() map[string]*entity.Repository
@@ -174,7 +177,67 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
 			return err
 		}
 
-		commit, err := w.Commit("Added example.txt", &git.CommitOptions{
+		commit, err := w.Commit("update CODEOWNERS", &git.CommitOptions{
+			Author: &object.Signature{
+				Name:  "Goliac",
+				Email: config.Config.GoliacEmail,
+				When:  time.Now(),
+			},
+		})
+
+		if err != nil {
+			return err
+		}
+
+		_, err = g.repo.CommitObject(commit)
+		if err != nil {
+			return err
+		}
+
+		err = g.repo.Push(&git.PushOptions{})
+
+		return err
+	}
+	return nil
+}
+
+func (g *GoliacLocalImpl) LoadUpdateAndCommitTeams(dryrun bool) error {
+	if g.repo == nil {
+		return fmt.Errorf("git repository not cloned")
+	}
+	w, err := g.repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	// read the organization files
+	fs := afero.NewOsFs()
+	rootDir := w.Filesystem.Root()
+	errors, _ := g.loadUsers(fs, rootDir)
+	if len(errors) > 0 {
+		return fmt.Errorf("cannot read users (for example: %v)", errors[0])
+	}
+
+	teamschanged, err := entity.ReadAndAdjustTeamDirectory(fs, filepath.Join(rootDir, "teams"), g.users)
+	if err != nil {
+		return err
+	}
+
+	if len(teamschanged) > 0 {
+		logrus.Info("some teams must be regenerated")
+		if dryrun {
+			return nil
+		}
+
+		for _, t := range teamschanged {
+
+			_, err = w.Add(path.Join(t))
+			if err != nil {
+				return err
+			}
+		}
+
+		commit, err := w.Commit("update teams", &git.CommitOptions{
 			Author: &object.Signature{
 				Name:  "Goliac",
 				Email: config.Config.GoliacEmail,
@@ -206,9 +269,9 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
  * - repositoryUrl: the URL of the repository to clone
  * - branch: the branch to checkout
  */
-func (g *GoliacLocalImpl) LoadAndValidate() ([]error, []error) {
+func (g *GoliacLocalImpl) LoadAndValidate() ([]error, []entity.Warning) {
 	if g.repo == nil {
-		return []error{fmt.Errorf("The repository has not been cloned. Did you called .Clone()?")}, []error{}
+		return []error{fmt.Errorf("The repository has not been cloned. Did you called .Clone()?")}, []entity.Warning{}
 	}
 
 	// read the organization files
@@ -216,7 +279,7 @@ func (g *GoliacLocalImpl) LoadAndValidate() ([]error, []error) {
 
 	w, err := g.repo.Worktree()
 	if err != nil {
-		return []error{err}, []error{}
+		return []error{err}, []entity.Warning{}
 	}
 	rootDir := w.Filesystem.Root()
 	errs, warns := g.LoadAndValidateLocal(fs, rootDir)
@@ -224,14 +287,9 @@ func (g *GoliacLocalImpl) LoadAndValidate() ([]error, []error) {
 	return errs, warns
 }
 
-/**
- * readOrganization reads all the organization files and returns
- * - a slice of errors that must stop the vlidation process
- * - a slice of warning that must not stop the validation process
- */
-func (g *GoliacLocalImpl) LoadAndValidateLocal(fs afero.Fs, orgDirectory string) ([]error, []error) {
+func (g *GoliacLocalImpl) loadUsers(fs afero.Fs, orgDirectory string) ([]error, []entity.Warning) {
 	errors := []error{}
-	warnings := []error{}
+	warnings := []entity.Warning{}
 
 	// Parse all the users in the <orgDirectory>/protected-users directory
 	protectedUsers, errs, warns := entity.ReadUserDirectory(fs, filepath.Join(orgDirectory, "users", "protected"))
@@ -258,6 +316,21 @@ func (g *GoliacLocalImpl) LoadAndValidateLocal(fs afero.Fs, orgDirectory string)
 	errors = append(errors, errs...)
 	warnings = append(warnings, warns...)
 	g.externalUsers = externalUsers
+
+	return errors, warnings
+}
+
+/**
+ * readOrganization reads all the organization files and returns
+ * - a slice of errors that must stop the vlidation process
+ * - a slice of warning that must not stop the validation process
+ */
+func (g *GoliacLocalImpl) LoadAndValidateLocal(fs afero.Fs, orgDirectory string) ([]error, []entity.Warning) {
+	errors, warnings := g.loadUsers(fs, orgDirectory)
+
+	if len(errors) > 0 {
+		return errors, warnings
+	}
 
 	// Parse all the teams in the <orgDirectory>/teams directory
 	teams, errs, warns := entity.ReadTeamDirectory(fs, filepath.Join(orgDirectory, "teams"), g.users)

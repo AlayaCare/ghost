@@ -5,6 +5,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type Warning error
+
 type Entity struct {
 	ApiVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`

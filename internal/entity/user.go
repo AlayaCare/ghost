@@ -40,9 +40,9 @@ func NewUser(fs afero.Fs, filename string) (*User, error) {
  * - a slice of errors that must stop the vlidation process
  * - a slice of warning that must not stop the validation process
  */
-func ReadUserDirectory(fs afero.Fs, dirname string) (map[string]*User, []error, []error) {
+func ReadUserDirectory(fs afero.Fs, dirname string) (map[string]*User, []error, []Warning) {
 	errors := []error{}
-	warning := []error{}
+	warning := []Warning{}
 	users := make(map[string]*User)
 
 	exist, err := afero.Exists(fs, dirname)

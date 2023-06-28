@@ -22,6 +22,9 @@ type Goliac interface {
 	// You need to call LoadAndValidategoliacOrganization before calling this function
 	ApplyToGithub(dryrun bool) error
 
+	// You dont need to call LoadAndValidategoliacOrganization before calling this function
+	PostUsersChanged(repositoryUrl, branch string) error
+
 	// to close the clone git repository (if you called LoadAndValidateGoliacOrganization)
 	Close()
 
@@ -62,7 +65,7 @@ func NewGoliacImpl() (Goliac, error) {
 
 func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch string) error {
 	errs := []error{}
-	warns := []error{}
+	warns := []entity.Warning{}
 	if strings.HasPrefix(repositoryUrl, "https://") {
 		accessToken, err := g.githubClient.GetAccessToken()
 		if err != nil {
@@ -99,6 +102,21 @@ func (g *GoliacImpl) ApplyToGithub(dryrun bool) error {
 		return err
 	}
 	err = g.local.UpdateAndCommitCodeOwners(dryrun)
+	return err
+}
+
+func (g *GoliacImpl) PostUsersChanged(repositoryUrl, branch string) error {
+	accessToken, err := g.githubClient.GetAccessToken()
+	if err != nil {
+		return err
+	}
+
+	err = g.local.Clone(accessToken, repositoryUrl, branch)
+	if err != nil {
+		return err
+	}
+
+	err = g.local.LoadUpdateAndCommitTeams(false)
 	return err
 }
 

@@ -47,9 +47,9 @@ func NewRepository(fs afero.Fs, filename string) (*Repository, error) {
  * - a slice of errors that must stop the validation process
  * - a slice of warning that must not stop the validation process
  */
-func ReadRepositories(fs afero.Fs, archivedDirname string, teamDirname string, teams map[string]*Team, externalUsers map[string]*User) (map[string]*Repository, []error, []error) {
+func ReadRepositories(fs afero.Fs, archivedDirname string, teamDirname string, teams map[string]*Team, externalUsers map[string]*User) (map[string]*Repository, []error, []Warning) {
 	errors := []error{}
-	warning := []error{}
+	warning := []Warning{}
 	repos := make(map[string]*Repository)
 
 	// archived dir
