@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Alayacare/goliac/internal/entity"
+	"github.com/Alayacare/goliac/internal/usersync"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/afero"
@@ -141,5 +142,72 @@ func TestRepository(t *testing.T) {
 		fmt.Println(warns)
 		assert.Equal(t, 0, len(errs))
 		assert.Equal(t, 0, len(warns))
+	})
+}
+
+type ScrambleUserSync struct {
+}
+
+func (p *ScrambleUserSync) UpdateUsers(orguserdirrectorypath string) (map[string]*entity.User, error) {
+	users := make(map[string]*entity.User)
+
+	// added
+	foobar := &entity.User{}
+	foobar.ApiVersion = "v1"
+	foobar.Kind = "User"
+	foobar.Metadata.Name = "foobar"
+	foobar.Data.GithubID = "foobar"
+	users["foobar"] = foobar
+
+	// updated
+	user1 := &entity.User{}
+	user1.ApiVersion = "v1"
+	user1.Kind = "User"
+	user1.Metadata.Name = "user1"
+	user1.Data.GithubID = "user1"
+	users["user1"] = foobar
+
+	return users, nil
+}
+
+type ErroreUserSync struct {
+}
+
+func (p *ErroreUserSync) UpdateUsers(orguserdirrectorypath string) (map[string]*entity.User, error) {
+	return nil, fmt.Errorf("unknown error")
+}
+
+func TestSyncUsersViaUserPlugin(t *testing.T) {
+	t.Run("happy path: noop", func(t *testing.T) {
+		fs := afero.NewMemMapFs()
+		createBasicStructure(fs, "/tmp/goliac")
+
+		removed, added, err := syncUsersViaUserPlugin(fs, &usersync.UserSyncPluginNoop{
+			Fs: fs,
+		}, "/tmp/goliac")
+
+		assert.Nil(t, err)
+		assert.Equal(t, 0, len(removed))
+		assert.Equal(t, 0, len(added))
+	})
+	t.Run("happy path: replcae with foobar", func(t *testing.T) {
+		fs := afero.NewMemMapFs()
+		createBasicStructure(fs, "/tmp/goliac")
+
+		removed, added, err := syncUsersViaUserPlugin(fs, &ScrambleUserSync{}, "/tmp/goliac")
+
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(removed))
+		assert.Equal(t, 2, len(added))
+		assert.Equal(t, "/tmp/goliac/users/org/user1.yaml", added[0])
+		assert.Equal(t, "/tmp/goliac/users/org/foobar.yaml", added[1])
+	})
+	t.Run("not happy path: dealing with usersync error", func(t *testing.T) {
+		fs := afero.NewMemMapFs()
+		createBasicStructure(fs, "/tmp/goliac")
+
+		_, _, err := syncUsersViaUserPlugin(fs, &ErroreUserSync{}, "/tmp/goliac")
+
+		assert.NotNil(t, err)
 	})
 }

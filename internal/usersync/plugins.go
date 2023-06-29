@@ -7,8 +7,8 @@ func init() {
 }
 
 type UserSyncPlugin interface {
-	// Get the current user list, returns the new user list
-	UpdateUsers(map[string]*entity.User) map[string]*entity.User
+	// Get the current user list directory path, returns the new user list
+	UpdateUsers(orguserdirrectorypath string) (map[string]*entity.User, error)
 }
 
 var plugins map[string]UserSyncPlugin
@@ -16,6 +16,7 @@ var plugins map[string]UserSyncPlugin
 func registerPlugins() {
 	plugins = make(map[string]UserSyncPlugin)
 	plugins["noop"] = NewUserSyncPluginNoop()
+	plugins["shellscript"] = NewUserSyncPluginShellScript()
 }
 
 func GetUserSyncPlugin(pluginname string) (UserSyncPlugin, bool) {

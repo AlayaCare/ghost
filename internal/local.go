@@ -203,6 +203,60 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
 	return nil
 }
 
+/**
+ * syncusers will
+ * - list the current users list
+ * - call the external user sync plugin
+ * - collect the difference
+ * - returns deleted users, and add/updated users
+ */
+func syncUsersViaUserPlugin(fs afero.Fs, userplugin usersync.UserSyncPlugin, rootDir string) ([]string, []string, error) {
+	orgUsers, errs, _ := entity.ReadUserDirectory(fs, filepath.Join(rootDir, "users", "org"))
+	if len(errs) > 0 {
+		return nil, nil, fmt.Errorf("cannot load org users (for example: %v)", errs[0])
+	}
+
+	// use usersync to update the users
+	newOrgUsers, err := userplugin.UpdateUsers(filepath.Join(rootDir, "users", "org"))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// write back to disk
+	deletedusers := []string{}
+	updatedusers := []string{}
+	for username, user := range orgUsers {
+		if newuser, ok := newOrgUsers[username]; !ok {
+			// deleted user
+			deletedusers = append(deletedusers, filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
+			fs.Remove(filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
+		} else {
+			// check if user changed
+			if !newuser.Equals(user) {
+				// changed user
+				newContent, err := yaml.Marshal(newuser)
+				if err != nil {
+					return nil, nil, err
+				}
+				afero.WriteFile(fs, filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)), newContent, 0644)
+				updatedusers = append(updatedusers, filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
+			}
+
+			delete(newOrgUsers, username)
+		}
+	}
+	for username, user := range newOrgUsers {
+		// new user
+		newContent, err := yaml.Marshal(user)
+		if err != nil {
+			return nil, nil, err
+		}
+		afero.WriteFile(fs, filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)), newContent, 0644)
+		updatedusers = append(updatedusers, filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
+	}
+	return deletedusers, updatedusers, nil
+}
+
 func (g *GoliacLocalImpl) SyncUsersAndTeams(userplugin usersync.UserSyncPlugin, dryrun bool) error {
 	if g.repo == nil {
 		return fmt.Errorf("git repository not cloned")
@@ -213,7 +267,6 @@ func (g *GoliacLocalImpl) SyncUsersAndTeams(userplugin usersync.UserSyncPlugin, 
 	}
 
 	// read the organization files
-	fs := afero.NewOsFs()
 	rootDir := w.Filesystem.Root()
 
 	//
@@ -221,47 +274,10 @@ func (g *GoliacLocalImpl) SyncUsersAndTeams(userplugin usersync.UserSyncPlugin, 
 	//
 
 	// Parse all the users in the <orgDirectory>/org-users directory
-	orgUsers, errs, _ := entity.ReadUserDirectory(fs, filepath.Join(rootDir, "users", "org"))
-	if len(errs) > 0 {
-		return fmt.Errorf("cannot load org users (for example: %v)", errs[0])
-	}
-
-	// use usersync to update the users
-	newOrgUsers := userplugin.UpdateUsers(orgUsers)
-
-	// write back to disk
-	userchanged := false
-	for username, user := range orgUsers {
-		if newuser, ok := newOrgUsers[username]; !ok {
-			// deleted user
-			w.Remove(filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
-			fs.Remove(filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
-			userchanged = true
-		} else {
-			// check if user changed
-			if !newuser.Equals(user) {
-				// changed user
-				newContent, err := yaml.Marshal(newuser)
-				if err != nil {
-					return err
-				}
-				afero.WriteFile(fs, filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)), newContent, 0644)
-				w.Add(filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
-				userchanged = true
-			}
-
-			delete(newOrgUsers, username)
-		}
-	}
-	for username, user := range newOrgUsers {
-		// new user
-		newContent, err := yaml.Marshal(user)
-		if err != nil {
-			return err
-		}
-		afero.WriteFile(fs, filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)), newContent, 0644)
-		w.Add(filepath.Join(rootDir, "users", "org", fmt.Sprintf("%s.yaml", username)))
-		userchanged = true
+	fs := afero.NewOsFs()
+	deletedusers, addedusers, err := syncUsersViaUserPlugin(fs, userplugin, rootDir)
+	if err != nil {
+		return err
 	}
 
 	//
@@ -278,22 +294,38 @@ func (g *GoliacLocalImpl) SyncUsersAndTeams(userplugin usersync.UserSyncPlugin, 
 		return err
 	}
 
-	if len(teamschanged) > 0 || userchanged {
-
-		for _, t := range teamschanged {
-
-			_, err = w.Add(path.Join(t))
-			if err != nil {
-				return err
-			}
-		}
+	//
+	// let's commit
+	//
+	if len(teamschanged) > 0 || len(deletedusers) > 0 || len(addedusers) > 0 {
 
 		logrus.Info("some users and/or teams must be commited")
 		if dryrun {
 			return nil
 		}
 
-		commit, err := w.Commit("update teams", &git.CommitOptions{
+		for _, u := range deletedusers {
+			_, err = w.Remove(u)
+			if err != nil {
+				return err
+			}
+		}
+
+		for _, u := range addedusers {
+			_, err = w.Add(u)
+			if err != nil {
+				return err
+			}
+		}
+
+		for _, t := range teamschanged {
+			_, err = w.Add(t)
+			if err != nil {
+				return err
+			}
+		}
+
+		commit, err := w.Commit("update teams and users", &git.CommitOptions{
 			Author: &object.Signature{
 				Name:  "Goliac",
 				Email: config.Config.GoliacEmail,
