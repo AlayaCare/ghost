@@ -29,7 +29,7 @@ func NewGithubCommandCreateRepository(client GitHubClient, reponame string, desc
 func (g *GithubCommandCreateRepository) Apply() error {
 	// create team
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#create-a-team
-	_, err := g.client.CallRestAPIWithBody(
+	_, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/repos", config.Config.GithubAppOrganization),
 		"POST",
 		map[string]interface{}{"name": g.reponame, "description": g.description, "private": !g.public},
@@ -41,7 +41,7 @@ func (g *GithubCommandCreateRepository) Apply() error {
 	// add members
 	for _, reader := range g.readers {
 		// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#add-or-update-team-repository-permissions
-		_, err := g.client.CallRestAPIWithBody(
+		_, err := g.client.CallRestAPI(
 			fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", config.Config.GithubAppOrganization, reader, config.Config.GithubAppOrganization, g.reponame),
 			"PUT",
 			map[string]interface{}{"permission": "pull"},
@@ -52,7 +52,7 @@ func (g *GithubCommandCreateRepository) Apply() error {
 	}
 	for _, writer := range g.writers {
 		// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#add-or-update-team-repository-permissions
-		_, err := g.client.CallRestAPIWithBody(
+		_, err := g.client.CallRestAPI(
 			fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", config.Config.GithubAppOrganization, writer, config.Config.GithubAppOrganization, g.reponame),
 			"PUT",
 			map[string]interface{}{"permission": "push"},

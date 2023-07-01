@@ -22,7 +22,7 @@ func NewGithubCommandUpdateTeamRemoveMember(client GitHubClient, teamslug string
 
 func (g *GithubCommandUpdateTeamRemoveMember) Apply() error {
 	// https://docs.github.com/en/rest/teams/members?apiVersion=2022-11-28#add-or-update-team-membership-for-a-user
-	_, err := g.client.CallRestAPIWithBody(
+	_, err := g.client.CallRestAPI(
 		fmt.Sprintf("orgs/%s/teams/%s/memberships/%s", config.Config.GithubAppOrganization, g.teamslug, g.member),
 		"DELETE",
 		nil,

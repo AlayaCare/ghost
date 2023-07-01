@@ -25,7 +25,7 @@ func NewGithubCommandUpdateRepositorySetTeamAccess(client GitHubClient, reponame
 func (g *GithubCommandUpdateRepositorySetTeamAccess) Apply() error {
 	// update member
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#add-or-update-team-repository-permissions
-	_, err := g.client.CallRestAPIWithBody(
+	_, err := g.client.CallRestAPI(
 		fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", config.Config.GithubAppOrganization, g.teamslug, config.Config.GithubAppOrganization, g.reponame),
 		"PUT",
 		map[string]interface{}{"permission": g.permission},

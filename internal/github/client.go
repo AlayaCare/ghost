@@ -17,8 +17,7 @@ import (
 
 type GitHubClient interface {
 	QueryGraphQLAPI(query string, variables map[string]interface{}) ([]byte, error)
-	CallRestAPIWithBody(endpoint, method string, body map[string]interface{}) ([]byte, error)
-	CallRestAPI(endpoint string) ([]byte, error)
+	CallRestAPI(endpoint, method string, body map[string]interface{}) ([]byte, error)
 	GetAccessToken() (string, error)
 }
 
@@ -219,47 +218,6 @@ func (client *GitHubClientImpl) QueryGraphQLAPI(query string, variables map[stri
 }
 
 /*
- * CallRestAPI
- * @param {string} endpoint
- *
- * Example:
- * responseBody, err := client.CallRestAPI("repos/my-org/my-repo")
- */
-func (client *GitHubClientImpl) CallRestAPI(endpoint string) ([]byte, error) {
-	req, err := http.NewRequest("GET", client.gitHubServer+"/"+endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := client.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %s", resp.Status)
-	}
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		// We're being rate limited. Get the reset time from the headers.
-		if err := waitRateLimix(resp.Header.Get("X-RateLimit-Reset")); err != nil {
-			return nil, err
-		}
-
-		// Retry the request.
-		return client.CallRestAPI(endpoint)
-	} else {
-		responseBody, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-
-		return responseBody, nil
-	}
-}
-
-/*
  * CallRestAPIWithBody
  * @param {string} endpoint
  * @param {string} method
@@ -272,7 +230,7 @@ func (client *GitHubClientImpl) CallRestAPI(endpoint string) ([]byte, error) {
  * }
  * responseBody, err := client.CallRestAPIWithBody("orgs/my-org/repos", "POST", body)
  */
-func (client *GitHubClientImpl) CallRestAPIWithBody(endpoint, method string, body map[string]interface{}) ([]byte, error) {
+func (client *GitHubClientImpl) CallRestAPI(endpoint, method string, body map[string]interface{}) ([]byte, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -300,7 +258,7 @@ func (client *GitHubClientImpl) CallRestAPIWithBody(endpoint, method string, bod
 		}
 
 		// Retry the request.
-		return client.CallRestAPIWithBody(endpoint, method, body)
+		return client.CallRestAPI(endpoint, method, body)
 	} else {
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return nil, fmt.Errorf("unexpected status: %s", resp.Status)

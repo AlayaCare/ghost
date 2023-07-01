@@ -31,7 +31,7 @@ type CreateTeamResponse struct {
 func (g *GithubCommandCreateTeam) Apply() error {
 	// create team
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#create-a-team
-	body, err := g.client.CallRestAPIWithBody(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/teams", config.Config.GithubAppOrganization),
 		"POST",
 		map[string]interface{}{"name": g.teamname, "description": g.description, "privacy": "closed"},
@@ -48,7 +48,7 @@ func (g *GithubCommandCreateTeam) Apply() error {
 	// add members
 	for _, member := range g.members {
 		// https://docs.github.com/en/rest/teams/members?apiVersion=2022-11-28#add-or-update-team-membership-for-a-user
-		_, err := g.client.CallRestAPIWithBody(
+		_, err := g.client.CallRestAPI(
 			fmt.Sprintf("orgs/%s/teams/%s/memberships/%s", config.Config.GithubAppOrganization, res.Slug, member),
 			"PUT",
 			map[string]interface{}{"role": "member"},

@@ -21,7 +21,7 @@ func NewGithubCommandDeleteRepository(client GitHubClient, reponame string) Gith
 func (g *GithubCommandDeleteRepository) Apply() error {
 	// delete repo
 	// https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#delete-a-repository
-	_, err := g.client.CallRestAPIWithBody(
+	_, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/%s", config.Config.GithubAppOrganization, g.reponame),
 		"DELETE",
 		nil,

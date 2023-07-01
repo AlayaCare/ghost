@@ -381,10 +381,7 @@ func (m *MockGithubClient) QueryGraphQLAPI(query string, variables map[string]in
 	return j, nil
 }
 
-func (m *MockGithubClient) CallRestAPIWithBody(endpoint, method string, body map[string]interface{}) ([]byte, error) {
-	return nil, nil
-}
-func (m *MockGithubClient) CallRestAPI(endpoint string) ([]byte, error) {
+func (m *MockGithubClient) CallRestAPI(endpoint, method string, body map[string]interface{}) ([]byte, error) {
 	return nil, nil
 }
 func (m *MockGithubClient) GetAccessToken() (string, error) {

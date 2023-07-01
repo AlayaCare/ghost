@@ -21,7 +21,7 @@ func NewGithubCommandDeleteTeam(client GitHubClient, teamslug string) GithubComm
 func (g *GithubCommandDeleteTeam) Apply() error {
 	// delete team
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#delete-a-team
-	_, err := g.client.CallRestAPIWithBody(
+	_, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/teams/%s", config.Config.GithubAppOrganization, g.teamslug),
 		"DELETE",
 		nil,

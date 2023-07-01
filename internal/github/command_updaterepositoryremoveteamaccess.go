@@ -21,9 +21,9 @@ func NewGithubCommandUpdateRepositoryRemoveTeamAccess(client GitHubClient, repon
 }
 
 func (g *GithubCommandUpdateRepositoryRemoveTeamAccess) Apply() error {
-	// update member
+	// delete member
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#remove-a-repository-from-a-team
-	_, err := g.client.CallRestAPIWithBody(
+	_, err := g.client.CallRestAPI(
 		fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", config.Config.GithubAppOrganization, g.teamslug, config.Config.GithubAppOrganization, g.reponame),
 		"DELETE",
 		nil,
