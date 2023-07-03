@@ -64,19 +64,21 @@ func ReadTeamDirectory(fs afero.Fs, dirname string, users map[string]*User) (map
 	}
 
 	for _, e := range entries {
-		if e.IsDir() {
-			team, err := NewTeam(fs, filepath.Join(dirname, e.Name(), "team.yaml"))
+		if !e.IsDir() {
+			continue
+		}
+		team, err := NewTeam(fs, filepath.Join(dirname, e.Name(), "team.yaml"))
+		if err != nil {
+			errors = append(errors, err)
+		} else {
+			err, warns := team.Validate(filepath.Join(dirname, e.Name()), users)
+			warning = append(warning, warns...)
 			if err != nil {
 				errors = append(errors, err)
 			} else {
-				err, warns := team.Validate(filepath.Join(dirname, e.Name()), users)
-				warning = append(warning, warns...)
-				if err != nil {
-					errors = append(errors, err)
-				} else {
-					teams[team.Metadata.Name] = team
-				}
+				teams[team.Metadata.Name] = team
 			}
+
 		}
 	}
 	return teams, errors, warning

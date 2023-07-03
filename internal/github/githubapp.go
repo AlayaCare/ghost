@@ -6,7 +6,7 @@ import (
 )
 
 type Installation struct {
-	ID      string `json:"id"`
+	ID      int `json:"id"`
 	Account struct {
 		Login string `json:"login"`
 	} `json:"account"`

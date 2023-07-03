@@ -47,6 +47,7 @@ func (m *GoliacLocalMock) Close() {
 }
 
 type GoliacRemoteMock struct {
+	users      map[string]string
 	teams      map[string]*GithubTeam // key is the slug team
 	repos      map[string]*GithubRepository
 	teamsrepos map[string]map[string]*GithubTeamRepo // key is the slug team
@@ -55,6 +56,10 @@ type GoliacRemoteMock struct {
 func (m *GoliacRemoteMock) Load() error {
 	return nil
 }
+func (m *GoliacRemoteMock) Users() map[string]string {
+	return m.users
+}
+
 func (m *GoliacRemoteMock) TeamSlugByName() map[string]string {
 	slugs := make(map[string]string)
 	for _, v := range m.teams {
@@ -73,6 +78,9 @@ func (m *GoliacRemoteMock) TeamRepositories() map[string]map[string]*GithubTeamR
 }
 
 type ReconciliatorListenerRecorder struct {
+	UsersCreated map[string]string
+	UsersRemoved map[string]string
+
 	TeamsCreated      map[string][]string
 	TeamMemberAdded   map[string][]string
 	TeamMemberRemoved map[string][]string
@@ -102,6 +110,12 @@ func NewReconciliatorListenerRecorder() *ReconciliatorListenerRecorder {
 		RepositoriesUpdateArchived: make(map[string]bool),
 	}
 	return &r
+}
+func (r *ReconciliatorListenerRecorder) AddUserToOrg(ghuserid string) {
+	r.UsersCreated[ghuserid] = ghuserid
+}
+func (r *ReconciliatorListenerRecorder) RemoveUserFromOrg(ghuserid string) {
+	r.UsersRemoved[ghuserid] = ghuserid
 }
 func (r *ReconciliatorListenerRecorder) CreateTeam(teamname string, description string, members []string) {
 	r.TeamsCreated[teamname] = append(r.TeamsCreated[teamname], members...)
@@ -161,6 +175,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["new"] = newTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -189,6 +204,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["nouveauté"] = newTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -217,6 +233,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["existing"] = existingTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -257,6 +274,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["exist ing"] = existingTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -294,6 +312,7 @@ func TestReconciliation(t *testing.T) {
 		}
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -327,6 +346,7 @@ func TestReconciliation(t *testing.T) {
 		local.repos["new"] = newRepo
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -362,6 +382,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["existing"] = existingTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -403,6 +424,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["existing"] = existingTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -464,6 +486,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["reader"] = readerTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -531,6 +554,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["reader"] = readerTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -597,6 +621,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["existing"] = existingTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -659,6 +684,7 @@ func TestReconciliation(t *testing.T) {
 		local.teams["reader"] = readerTeam
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
@@ -700,6 +726,7 @@ func TestReconciliation(t *testing.T) {
 		}
 
 		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
 			teams:      make(map[string]*GithubTeam),
 			repos:      make(map[string]*GithubRepository),
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),

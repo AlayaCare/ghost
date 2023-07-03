@@ -3,6 +3,7 @@ package entity
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
@@ -66,6 +67,12 @@ func ReadRepositories(fs afero.Fs, archivedDirname string, teamDirname string, t
 		}
 
 		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if !strings.HasSuffix(entry.Name(), ".yaml") {
+				continue
+			}
 			repo, err := NewRepository(fs, filepath.Join(archivedDirname, entry.Name()))
 			if err != nil {
 				errors = append(errors, err)

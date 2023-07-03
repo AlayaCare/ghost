@@ -1,6 +1,9 @@
 package internal
 
 type ReconciliatorListener interface {
+	AddUserToOrg(ghuserid string)
+	RemoveUserFromOrg(ghuserid string)
+
 	CreateTeam(teamname string, description string, members []string)
 	UpdateTeamAddMember(teamslug string, username string, role string) // role can be 'member' or 'maintainer'
 	//UpdateTeamUpdateMember(teamslug string, username string, role string) // role can be 'member' or 'maintainer'

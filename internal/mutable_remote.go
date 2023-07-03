@@ -1,6 +1,8 @@
 package internal
 
-import "github.com/Alayacare/goliac/internal/slugify"
+import (
+	"github.com/Alayacare/goliac/internal/slugify"
+)
 
 /*
  * MutableGoliacRemoteImpl is used by GoliacReconciliatorImpl to update
@@ -8,6 +10,7 @@ import "github.com/Alayacare/goliac/internal/slugify"
  * (or running in drymode)
  */
 type MutableGoliacRemoteImpl struct {
+	users          map[string]string
 	repositories   map[string]*GithubRepository
 	teams          map[string]*GithubTeam
 	teamRepos      map[string]map[string]*GithubTeamRepo
@@ -15,6 +18,10 @@ type MutableGoliacRemoteImpl struct {
 }
 
 func NewMutableGoliacRemoteImpl(remote GoliacRemote) *MutableGoliacRemoteImpl {
+	rUsers := make(map[string]string)
+	for k, v := range remote.Users() {
+		rUsers[k] = v
+	}
 	rTeamSlugByName := make(map[string]string)
 	for k, v := range remote.TeamSlugByName() {
 		rTeamSlugByName[k] = v
@@ -41,11 +48,16 @@ func NewMutableGoliacRemoteImpl(remote GoliacRemote) *MutableGoliacRemoteImpl {
 		rTeamRepositories[k1] = repos
 	}
 	return &MutableGoliacRemoteImpl{
+		users:          rUsers,
 		repositories:   rRepositories,
 		teams:          rTeams,
 		teamRepos:      rTeamRepositories,
 		teamSlugByName: rTeamSlugByName,
 	}
+}
+
+func (m *MutableGoliacRemoteImpl) Users() map[string]string {
+	return m.users
 }
 
 func (m *MutableGoliacRemoteImpl) TeamSlugByName() map[string]string {
@@ -63,6 +75,14 @@ func (m *MutableGoliacRemoteImpl) TeamRepositories() map[string]map[string]*Gith
 }
 
 // LISTENER
+
+func (m *MutableGoliacRemoteImpl) AddUserToOrg(ghuserid string) {
+	m.users[ghuserid] = ghuserid
+}
+
+func (m *MutableGoliacRemoteImpl) RemoveUserFromOrg(ghuserid string) {
+	delete(m.users, ghuserid)
+}
 
 func (m *MutableGoliacRemoteImpl) CreateTeam(teamname string, description string, members []string) {
 	teamslug := slugify.Make(teamname)
@@ -99,7 +119,9 @@ func (m *MutableGoliacRemoteImpl) DeleteTeam(teamslug string) {
 }
 func (m *MutableGoliacRemoteImpl) CreateRepository(reponame string, descrition string, writers []string, readers []string, public bool) {
 	r := GithubRepository{
-		Name: reponame,
+		Name:       reponame,
+		IsArchived: false,
+		IsPrivate:  !public,
 	}
 	m.repositories[reponame] = &r
 }

@@ -24,7 +24,7 @@ type GitHubClient interface {
 type GitHubClientImpl struct {
 	gitHubServer    string
 	appID           string
-	installationID  string
+	installationID  int
 	privateKey      []byte
 	accessToken     string
 	httpClient      *http.Client
@@ -110,7 +110,7 @@ func NewGitHubClientImpl(githubServer, organizationName, appID, privateKeyFile s
 		}
 	}
 
-	if client.installationID == "" {
+	if client.installationID == 0 {
 		return nil, fmt.Errorf("installation not found for organization: %s", organizationName)
 	}
 
@@ -243,7 +243,8 @@ func (client *GitHubClientImpl) CallRestAPI(endpoint, method string, body map[st
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/vnd.github+json")
+	//	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	resp, err := client.httpClient.Do(req)
 	if err != nil {
@@ -300,7 +301,7 @@ type AccessTokenResponse struct {
 }
 
 func (client *GitHubClientImpl) getAccessTokenForInstallation(jwt string) (string, time.Time, error) {
-	req, err := http.NewRequest("POST", client.gitHubServer+"/app/installations/"+client.installationID+"/access_tokens", nil)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/app/installations/%d/access_tokens", client.gitHubServer, client.installationID), nil)
 	if err != nil {
 		return "", time.Now(), err
 	}

@@ -95,12 +95,20 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 }
 
 func (g *GoliacImpl) ApplyToGithub(dryrun bool) error {
-	err := g.reconciliator.Reconciliate(g.local, g.remote, dryrun)
+	err := g.remote.Load()
 	if err != nil {
-		return err
+		return fmt.Errorf("Error when fetching data from Github: %v", err)
+	}
+
+	err = g.reconciliator.Reconciliate(g.local, g.remote, dryrun)
+	if err != nil {
+		return fmt.Errorf("Error when reconciliating: %v", err)
 	}
 	err = g.local.UpdateAndCommitCodeOwners(dryrun)
-	return err
+	if err != nil {
+		return fmt.Errorf("Error when updating and commiting: %v", err)
+	}
+	return nil
 }
 
 func (g *GoliacImpl) UsersUpdate(repositoryUrl, branch string) error {

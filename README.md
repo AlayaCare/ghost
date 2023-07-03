@@ -15,7 +15,24 @@ Goliac allows you to provide a self-served tool to all your employees
 ## How to install and use
 
 You need to
+- install the Goliac Github App (and points to the server)
 - create the IAC github repository (with the Github actions associated) or clone the example repository
 - deploy the server somewhere (and configured it)
-- install the Goliac Github App (and points to the server)
 
+## Creating the Goliac Githun App
+
+- Register new GitHub App
+- Unde Organization permissions
+  - Give Read/Write access to `Administration`
+  - Give Read/Write access to `Members`
+- Where can this GitHub App be installed: `Only on this account`
+- And Create
+- then you must
+  - collect the AppID
+  - Generate (and collect) a client secret
+- Go to the left tab "Install App"
+  - Click on "Install"
+
+## Creating the IAC github repository
+
+You can check https://github.com/goliac-project/teams

@@ -156,12 +156,26 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
 		return err
 	}
 
-	file, err := os.Open(path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS"))
-	defer file.Close()
-
-	content, err := ioutil.ReadAll(file)
+	err = os.MkdirAll(path.Join(w.Filesystem.Root(), ".github"), 0755)
 	if err != nil {
 		return err
+	}
+
+	codeownerpath := path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS")
+	var content []byte
+
+	_, err = os.Stat(codeownerpath)
+	if os.IsExist(err) {
+
+		file, err := os.Open(codeownerpath)
+		defer file.Close()
+
+		content, err = ioutil.ReadAll(file)
+		if err != nil {
+			return fmt.Errorf("Not able to open .github/CODEOWNERS file: %v", err)
+		}
+	} else {
+		content = []byte("")
 	}
 
 	newContent := g.codeowners_regenerate()
@@ -431,6 +445,11 @@ func (g *GoliacLocalImpl) LoadAndValidateLocal(fs afero.Fs, orgDirectory string)
 	errors = append(errors, errs...)
 	warnings = append(warnings, warns...)
 	g.repositories = repos
+
+	logrus.Infof("Nb local users: %d", len(g.users))
+	logrus.Infof("Nb local external users: %d", len(g.externalUsers))
+	logrus.Infof("Nb local teams: %d", len(g.teams))
+	logrus.Infof("Nb local repositories: %d", len(g.repositories))
 
 	return errors, warnings
 }

@@ -3,6 +3,7 @@ package entity
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
@@ -62,19 +63,24 @@ func ReadUserDirectory(fs afero.Fs, dirname string) (map[string]*User, []error, 
 	}
 
 	for _, e := range entries {
-		if !e.IsDir() {
-			user, err := NewUser(fs, filepath.Join(dirname, e.Name()))
+		if e.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(e.Name(), ".yaml") {
+			continue
+		}
+		user, err := NewUser(fs, filepath.Join(dirname, e.Name()))
+		if err != nil {
+			errors = append(errors, err)
+		} else {
+			err = user.Validate(filepath.Join(dirname, e.Name()))
 			if err != nil {
 				errors = append(errors, err)
 			} else {
-				err = user.Validate(filepath.Join(dirname, e.Name()))
-				if err != nil {
-					errors = append(errors, err)
-				} else {
-					users[user.Metadata.Name] = user
-				}
+				users[user.Metadata.Name] = user
 			}
 		}
+
 	}
 	return users, errors, warning
 }

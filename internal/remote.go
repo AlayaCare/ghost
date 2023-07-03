@@ -5,6 +5,7 @@ import (
 
 	"github.com/Alayacare/goliac/internal/config"
 	"github.com/Alayacare/goliac/internal/github"
+	"github.com/sirupsen/logrus"
 )
 
 const FORLOOP_STOP = 100
@@ -18,6 +19,7 @@ type GoliacRemote interface {
 	// Load from a github repository
 	Load() error
 
+	Users() map[string]string
 	TeamSlugByName() map[string]string
 	Teams() map[string]*GithubTeam                           // the key is the team slug
 	Repositories() map[string]*GithubRepository              // the key is the repository name
@@ -43,6 +45,7 @@ type GithubTeamRepo struct {
 
 type GoliacRemoteImpl struct {
 	client         github.GitHubClient
+	users          map[string]string
 	repositories   map[string]*GithubRepository
 	teams          map[string]*GithubTeam
 	teamRepos      map[string]map[string]*GithubTeamRepo
@@ -52,11 +55,16 @@ type GoliacRemoteImpl struct {
 func NewGoliacRemoteImpl(client github.GitHubClient) GoliacRemote {
 	return &GoliacRemoteImpl{
 		client:         client,
+		users:          make(map[string]string),
 		repositories:   make(map[string]*GithubRepository),
 		teams:          make(map[string]*GithubTeam),
 		teamRepos:      make(map[string]map[string]*GithubTeamRepo),
 		teamSlugByName: make(map[string]string),
 	}
+}
+
+func (g *GoliacRemoteImpl) Users() map[string]string {
+	return g.users
 }
 
 func (g *GoliacRemoteImpl) TeamSlugByName() map[string]string {
@@ -71,6 +79,76 @@ func (g *GoliacRemoteImpl) Repositories() map[string]*GithubRepository {
 }
 func (g *GoliacRemoteImpl) TeamRepositories() map[string]map[string]*GithubTeamRepo {
 	return g.teamRepos
+}
+
+const listAllOrgMembers = `
+query listAllReposInOrg($orgLogin: String!, $endCursor: String) {
+    organization(login: $orgLogin) {
+		membersWithRole(first: 100, after: $endCursor) {
+        nodes {
+          login
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        totalCount
+      }
+    }
+  }
+`
+
+type GraplQLUsers struct {
+	Data struct {
+		Organization struct {
+			MembersWithRole struct {
+				Nodes []struct {
+					Login string
+				} `json:"nodes"`
+				PageInfo struct {
+					HasNextPage bool
+					EndCursor   string
+				} `json:"pageInfo"`
+				TotalCount int `json:"totalCount"`
+			} `json:"membersWithRole"`
+		}
+	}
+}
+
+func (g *GoliacRemoteImpl) loadOrgUsers() error {
+	g.users = make(map[string]string)
+
+	variables := make(map[string]interface{})
+	variables["orgLogin"] = config.Config.GithubAppOrganization
+	variables["endCursor"] = nil
+
+	hasNextPage := true
+	count := 0
+	for hasNextPage {
+		data, err := g.client.QueryGraphQLAPI(listAllOrgMembers, variables)
+		var gResult GraplQLUsers
+
+		// parse first page
+		err = json.Unmarshal(data, &gResult)
+		if err != nil {
+			return err
+		}
+
+		for _, c := range gResult.Data.Organization.MembersWithRole.Nodes {
+			g.users[c.Login] = c.Login
+		}
+
+		hasNextPage = gResult.Data.Organization.MembersWithRole.PageInfo.HasNextPage
+		variables["endCursor"] = gResult.Data.Organization.MembersWithRole.PageInfo.EndCursor
+
+		count++
+		// sanity check to avoid loops
+		if count > FORLOOP_STOP {
+			break
+		}
+	}
+
+	return nil
 }
 
 const listAllReposInOrg = `
@@ -232,7 +310,12 @@ type GraplQLTeamsRepos struct {
 }
 
 func (g *GoliacRemoteImpl) Load() error {
-	err := g.loadRepositories()
+	err := g.loadOrgUsers()
+	if err != nil {
+		return err
+	}
+
+	err = g.loadRepositories()
 	if err != nil {
 		return err
 	}
@@ -251,6 +334,11 @@ func (g *GoliacRemoteImpl) Load() error {
 		}
 		g.teamRepos[teamSlug] = repos
 	}
+
+	logrus.Infof("Nb remote users: %d", len(g.users))
+	logrus.Infof("Nb remote teams: %d", len(g.teams))
+	logrus.Infof("Nb remote repositories: %d", len(g.repositories))
+
 	return nil
 }
 

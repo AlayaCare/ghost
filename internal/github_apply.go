@@ -30,6 +30,14 @@ func NewGithubApplyListener(client github.GitHubClient) *GithubApplyListener {
 	return &gal
 }
 
+func (g *GithubApplyListener) AddUserToOrg(ghuserid string) {
+	g.commands = append(g.commands, github.NewGithubCommandAddUserToOrg(g.client, ghuserid))
+}
+
+func (g *GithubApplyListener) RemoveUserFromOrg(ghuserid string) {
+	g.commands = append(g.commands, github.NewGithubCommandRemoveUserFromOrg(g.client, ghuserid))
+}
+
 func (g *GithubApplyListener) CreateTeam(teamname string, description string, members []string) {
 	g.commands = append(g.commands, github.NewGithubCommandCreateTeam(g.client, teamname, description, members))
 }

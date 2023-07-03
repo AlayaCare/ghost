@@ -31,7 +31,13 @@ func (r *GoliacReconciliatorImpl) AddListener(l ReconciliatorListener) {
 func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacRemote, dryrun bool) error {
 	rremote := NewMutableGoliacRemoteImpl(remote)
 	r.Begin(dryrun)
-	err := r.reconciliateTeams(local, rremote, dryrun)
+	err := r.reconciliateUsers(local, rremote, dryrun)
+	if err != nil {
+		r.Rollback(dryrun, err)
+		return err
+	}
+
+	err = r.reconciliateTeams(local, rremote, dryrun)
 	if err != nil {
 		r.Rollback(dryrun, err)
 		return err
@@ -45,6 +51,36 @@ func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacR
 
 	r.Commit(dryrun)
 
+	return nil
+}
+
+/*
+ * This function sync teams and team's members
+ */
+func (r *GoliacReconciliatorImpl) reconciliateUsers(local GoliacLocal, remote *MutableGoliacRemoteImpl, dryrun bool) error {
+	ghUsers := remote.Users()
+
+	rUsers := make(map[string]string)
+	for _, u := range ghUsers {
+		rUsers[u] = u
+	}
+
+	for _, lUser := range local.Users() {
+		user, ok := rUsers[lUser.Data.GithubID]
+
+		if !ok {
+			// deal with non existing remote user
+			r.AddUserToOrg(dryrun, remote, user)
+		} else {
+			delete(rUsers, user)
+		}
+	}
+
+	// remaining (GH) users (aka not found locally)
+	for _, rUser := range rUsers {
+		// DELETE User
+		r.RemoveUserFromOrg(dryrun, remote, rUser)
+	}
 	return nil
 }
 
@@ -278,6 +314,26 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 	return nil
 }
 
+func (r *GoliacReconciliatorImpl) AddUserToOrg(dryrun bool, remote *MutableGoliacRemoteImpl, ghuserid string) {
+	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "add_user_to_org"}).Infof("ghusername: %s", ghuserid)
+	remote.AddUserToOrg(ghuserid)
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.AddUserToOrg(ghuserid)
+		}
+	}
+}
+
+func (r *GoliacReconciliatorImpl) RemoveUserFromOrg(dryrun bool, remote *MutableGoliacRemoteImpl, ghuserid string) {
+	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "remove_user_from_org"}).Infof("ghusername: %s", ghuserid)
+	remote.RemoveUserFromOrg(ghuserid)
+	if !dryrun {
+		for _, l := range r.listeners {
+			l.RemoveUserFromOrg(ghuserid)
+		}
+	}
+}
+
 func (r *GoliacReconciliatorImpl) CreateTeam(dryrun bool, remote *MutableGoliacRemoteImpl, teamname string, description string, members []string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "create_team"}).Infof("teamname: %s, members: %s", teamname, strings.Join(members, ","))
 	remote.CreateTeam(teamname, description, members)
@@ -315,7 +371,7 @@ func (r *GoliacReconciliatorImpl) DeleteTeam(dryrun bool, remote *MutableGoliacR
 	}
 }
 func (r *GoliacReconciliatorImpl) CreateRepository(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, descrition string, writers []string, readers []string, public bool) {
-	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "create_repository"}).Infof("repositoryname: %s, readers: %s, writers: %s, public: %v", strings.Join(readers, ","), strings.Join(writers, ","), reponame, public)
+	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "create_repository"}).Infof("repositoryname: %s, readers: %s, writers: %s, public: %v", reponame, strings.Join(readers, ","), strings.Join(writers, ","), public)
 	remote.CreateRepository(reponame, reponame, writers, readers, public)
 	if !dryrun {
 		for _, l := range r.listeners {
@@ -371,7 +427,7 @@ func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdatePrivate(dryrun bool, rem
 	}
 }
 func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdateArchived(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, archived bool) {
-	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_repository_update_private"}).Infof("repositoryname: %s archived:%v", reponame, archived)
+	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_repository_update_archived"}).Infof("repositoryname: %s archived:%v", reponame, archived)
 	remote.UpdateRepositoryUpdateArchived(reponame, archived)
 	if !dryrun {
 		for _, l := range r.listeners {
