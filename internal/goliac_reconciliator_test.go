@@ -702,7 +702,7 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "pull",
+			Permission: "push",
 		}
 
 		r.Reconciliate(&local, &remote, false)
