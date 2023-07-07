@@ -163,7 +163,7 @@ func (m *MockGithubClient) reposEdges(first, after string, args ast.ArgumentList
 	for totalCount = 0; totalCount < iFirst; totalCount++ {
 		block := make(map[string]interface{})
 		if searchPermission {
-			block["permission"] = "WRITE"
+			block["permission"] = "push"
 		}
 		if searchNode {
 			node := make(map[string]interface{})
@@ -427,7 +427,7 @@ func TestRemoteRepository(t *testing.T) {
 		repos, err := remoteImpl.loadTeamRepos("team-1")
 		assert.Nil(t, err)
 		assert.Equal(t, 2, len(repos))
-		assert.Equal(t, "WRITE", repos["repo_0"].Permission)
+		assert.Equal(t, "push", repos["repo_0"].Permission)
 	})
 
 	t.Run("happy path: load remote teams and team's repos", func(t *testing.T) {
