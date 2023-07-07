@@ -21,7 +21,7 @@ type Goliac interface {
 	LoadAndValidateGoliacOrganization(repositoryUrl, branch string) error
 
 	// You need to call LoadAndValidategoliacOrganization before calling this function
-	ApplyToGithub(dryrun bool) error
+	ApplyToGithub(dryrun bool, branch string) error
 
 	// You dont need to call LoadAndValidategoliacOrganization before calling this function
 	UsersUpdate(repositoryUrl, branch string) error
@@ -64,7 +64,7 @@ func NewGoliacImpl() (Goliac, error) {
 func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch string) error {
 	errs := []error{}
 	warns := []entity.Warning{}
-	if strings.HasPrefix(repositoryUrl, "https://") {
+	if strings.HasPrefix(repositoryUrl, "https://") || strings.HasPrefix(repositoryUrl, "git@") {
 		accessToken, err := g.githubClient.GetAccessToken()
 		if err != nil {
 			return err
@@ -72,7 +72,7 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 
 		err = g.local.Clone(accessToken, repositoryUrl, branch)
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to clone: %v", err)
 		}
 		errs, warns = g.local.LoadAndValidate()
 	} else {
@@ -94,7 +94,7 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 	return nil
 }
 
-func (g *GoliacImpl) ApplyToGithub(dryrun bool) error {
+func (g *GoliacImpl) ApplyToGithub(dryrun bool, branch string) error {
 	err := g.remote.Load()
 	if err != nil {
 		return fmt.Errorf("Error when fetching data from Github: %v", err)
@@ -104,7 +104,11 @@ func (g *GoliacImpl) ApplyToGithub(dryrun bool) error {
 	if err != nil {
 		return fmt.Errorf("Error when reconciliating: %v", err)
 	}
-	err = g.local.UpdateAndCommitCodeOwners(dryrun)
+	accessToken, err := g.githubClient.GetAccessToken()
+	if err != nil {
+		return err
+	}
+	err = g.local.UpdateAndCommitCodeOwners(dryrun, accessToken, branch)
 	if err != nil {
 		return fmt.Errorf("Error when updating and commiting: %v", err)
 	}

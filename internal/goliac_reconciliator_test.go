@@ -11,6 +11,7 @@ import (
 )
 
 type GoliacLocalMock struct {
+	users map[string]*entity.User
 	teams map[string]*entity.Team
 	repos map[string]*entity.Repository
 }
@@ -31,12 +32,12 @@ func (m *GoliacLocalMock) Repositories() map[string]*entity.Repository {
 	return m.repos
 }
 func (m *GoliacLocalMock) Users() map[string]*entity.User {
-	return nil
+	return m.users
 }
 func (m *GoliacLocalMock) ExternalUsers() map[string]*entity.User {
 	return nil
 }
-func (m *GoliacLocalMock) UpdateAndCommitCodeOwners(dryrun bool) error {
+func (m *GoliacLocalMock) UpdateAndCommitCodeOwners(dryrun bool, accesstoken string, branch string) error {
 	return nil
 }
 func (m *GoliacLocalMock) SyncUsersAndTeams(plugin usersync.UserSyncPlugin, dryrun bool) error {
@@ -97,6 +98,8 @@ type ReconciliatorListenerRecorder struct {
 
 func NewReconciliatorListenerRecorder() *ReconciliatorListenerRecorder {
 	r := ReconciliatorListenerRecorder{
+		UsersCreated:               make(map[string]string),
+		UsersRemoved:               make(map[string]string),
 		TeamsCreated:               make(map[string][]string),
 		TeamMemberAdded:            make(map[string][]string),
 		TeamMemberRemoved:          make(map[string][]string),
@@ -165,14 +168,24 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
 		newTeam := &entity.Team{}
 		newTeam.Metadata.Name = "new"
-		newTeam.Data.Owners = []string{"new_owner"}
-		newTeam.Data.Members = []string{"new_member"}
+		newTeam.Data.Owners = []string{"new.owner"}
+		newTeam.Data.Members = []string{"new.member"}
 		local.teams["new"] = newTeam
+
+		newOwner := entity.User{}
+		newOwner.Metadata.Name = "new.owner"
+		newOwner.Data.GithubID = "new_owner"
+		local.users["new.owner"] = &newOwner
+		newMember := entity.User{}
+		newMember.Metadata.Name = "new.member"
+		newMember.Data.GithubID = "new_member"
+		local.users["new.member"] = &newMember
 
 		remote := GoliacRemoteMock{
 			users:      make(map[string]string),
@@ -194,14 +207,24 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
 		newTeam := &entity.Team{}
 		newTeam.Metadata.Name = "nouveauté"
-		newTeam.Data.Owners = []string{"new_owner"}
-		newTeam.Data.Members = []string{"new_member"}
+		newTeam.Data.Owners = []string{"new.owner"}
+		newTeam.Data.Members = []string{"new.member"}
 		local.teams["nouveauté"] = newTeam
+
+		newOwner := entity.User{}
+		newOwner.Metadata.Name = "new.owner"
+		newOwner.Data.GithubID = "new_owner"
+		local.users["new.owner"] = &newOwner
+		newMember := entity.User{}
+		newMember.Metadata.Name = "new.member"
+		newMember.Data.GithubID = "new_member"
+		local.users["new.member"] = &newMember
 
 		remote := GoliacRemoteMock{
 			users:      make(map[string]string),
@@ -223,14 +246,30 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
 		existingTeam := &entity.Team{}
 		existingTeam.Metadata.Name = "existing"
-		existingTeam.Data.Owners = []string{"existing_owner", "existing_owner2"}
-		existingTeam.Data.Members = []string{"existing_member"}
+		existingTeam.Data.Owners = []string{"existing.owner", "existing.owner2"}
+		existingTeam.Data.Members = []string{"existing.member"}
 		local.teams["existing"] = existingTeam
+
+		existing_owner := entity.User{}
+		existing_owner.Metadata.Name = "existing.owner"
+		existing_owner.Data.GithubID = "existing_owner"
+		local.users["existing.owner"] = &existing_owner
+
+		existing_owner2 := entity.User{}
+		existing_owner2.Metadata.Name = "existing.owner2"
+		existing_owner2.Data.GithubID = "existing_owner2"
+		local.users["existing.owner2"] = &existing_owner2
+
+		existing_member := entity.User{}
+		existing_member.Metadata.Name = "existing.member"
+		existing_member.Data.GithubID = "existing_member"
+		local.users["existing.member"] = &existing_member
 
 		remote := GoliacRemoteMock{
 			users:      make(map[string]string),
@@ -264,14 +303,30 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
 		existingTeam := &entity.Team{}
 		existingTeam.Metadata.Name = "exist ing"
-		existingTeam.Data.Owners = []string{"existing_owner", "existing_owner2"}
-		existingTeam.Data.Members = []string{"existing_member"}
+		existingTeam.Data.Owners = []string{"existing.owner", "existing.owner2"}
+		existingTeam.Data.Members = []string{"existing.member"}
 		local.teams["exist ing"] = existingTeam
+
+		existing_owner := entity.User{}
+		existing_owner.Metadata.Name = "existing.owner"
+		existing_owner.Data.GithubID = "existing_owner"
+		local.users["existing.owner"] = &existing_owner
+
+		existing_owner2 := entity.User{}
+		existing_owner2.Metadata.Name = "existing.owner2"
+		existing_owner2.Data.GithubID = "existing_owner2"
+		local.users["existing.owner2"] = &existing_owner2
+
+		existing_member := entity.User{}
+		existing_member.Metadata.Name = "existing.member"
+		existing_member.Data.GithubID = "existing_member"
+		local.users["existing.member"] = &existing_member
 
 		remote := GoliacRemoteMock{
 			users:      make(map[string]string),
@@ -307,6 +362,7 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
@@ -336,6 +392,7 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
@@ -364,6 +421,7 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
@@ -406,6 +464,7 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
@@ -443,7 +502,7 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "READ",
+			Permission: "pull",
 		}
 
 		r.Reconciliate(&local, &remote, false)
@@ -462,6 +521,7 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
@@ -511,7 +571,7 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "WRITE",
+			Permission: "push",
 		}
 
 		r.Reconciliate(&local, &remote, false)
@@ -530,6 +590,7 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
@@ -579,12 +640,12 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "WRITE",
+			Permission: "push",
 		}
 		remote.teamsrepos["reader"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["reader"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "READ",
+			Permission: "pull",
 		}
 
 		r.Reconciliate(&local, &remote, false)
@@ -603,6 +664,7 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
@@ -640,7 +702,7 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "WRITE",
+			Permission: "pull",
 		}
 
 		r.Reconciliate(&local, &remote, false)
@@ -660,6 +722,7 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}
@@ -703,7 +766,7 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "WRITE",
+			Permission: "push",
 		}
 
 		r.Reconciliate(&local, &remote, false)
@@ -721,6 +784,7 @@ func TestReconciliation(t *testing.T) {
 		r.AddListener(recorder)
 
 		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
 			repos: make(map[string]*entity.Repository),
 		}

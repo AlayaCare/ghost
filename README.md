@@ -22,9 +22,12 @@ You need to
 ## Creating the Goliac Githun App
 
 - Register new GitHub App
-- Unde Organization permissions
+- Under Organization permissions
   - Give Read/Write access to `Administration`
   - Give Read/Write access to `Members`
+- Under Repository permissions
+  - Give Read/Write access to `Administration` 
+  - Give Read/Write access to `Repository Content` 
 - Where can this GitHub App be installed: `Only on this account`
 - And Create
 - then you must

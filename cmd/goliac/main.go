@@ -57,7 +57,7 @@ https://github.com/...`,
 			if err != nil {
 				logrus.Fatalf("failed to load and validate: %s", err)
 			}
-			err = goliac.ApplyToGithub(true)
+			err = goliac.ApplyToGithub(true, branch)
 			if err != nil {
 				logrus.Fatalf("failed to plan on branch %s: %s", branch, err)
 			}
@@ -85,7 +85,7 @@ https://github.com/...`,
 			if err != nil {
 				logrus.Fatalf("failed to load and validate: %s", err)
 			}
-			err = goliac.ApplyToGithub(false)
+			err = goliac.ApplyToGithub(false, branch)
 			if err != nil {
 				logrus.Fatalf("failed to apply on branch %s: %s", branch, err)
 			}

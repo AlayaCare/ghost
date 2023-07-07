@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Alayacare/goliac/internal/config"
@@ -14,8 +15,10 @@ import (
 	"github.com/Alayacare/goliac/internal/slugify"
 	"github.com/Alayacare/goliac/internal/usersync"
 	"github.com/go-git/go-git/v5"
+	goconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
@@ -32,7 +35,7 @@ type GoliacLocal interface {
 	// Load and Validate from a github repository
 	LoadAndValidate() ([]error, []entity.Warning)
 	// whenever someone create/delete a team, we must update the github CODEOWNERS
-	UpdateAndCommitCodeOwners(dryrun bool) error
+	UpdateAndCommitCodeOwners(dryrun bool, accesstoken string, branch string) error
 	// whenever the users list is changing, reload users and teams, and commit them
 	SyncUsersAndTeams(plugin usersync.UserSyncPlugin, dryrun bool) error
 	Close()
@@ -90,12 +93,19 @@ func (g *GoliacLocalImpl) Clone(accesstoken, repositoryUrl, branch string) error
 		return err
 	}
 
-	repo, err := git.PlainClone(tmpDir, false, &git.CloneOptions{
-		URL: repositoryUrl,
-		Auth: &http.BasicAuth{
+	var auth transport.AuthMethod
+	if strings.HasPrefix(repositoryUrl, "https://") {
+		auth = &http.BasicAuth{
 			Username: "x-access-token", // This can be anything except an empty string
 			Password: accesstoken,
-		},
+		}
+	} else {
+		// ssh clone not supported yet
+		return fmt.Errorf("not supported")
+	}
+	repo, err := git.PlainClone(tmpDir, false, &git.CloneOptions{
+		URL:  repositoryUrl,
+		Auth: auth,
 	})
 	if err != nil {
 		return err
@@ -147,7 +157,7 @@ func (g *GoliacLocalImpl) codeowners_regenerate() string {
  * UpdateAndCommitCodeOwners will collects all teams definition to update the .github/CODEOWNERS file
  * cf https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
  */
-func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
+func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool, accesstoken string, branch string) error {
 	if g.repo == nil {
 		return fmt.Errorf("git repository not cloned")
 	}
@@ -186,6 +196,9 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
 			return nil
 		}
 
+		// Get the HEAD reference
+		headRef, err := g.repo.Head()
+
 		ioutil.WriteFile(path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS"), []byte(newContent), 0644)
 
 		_, err = w.Add(path.Join(".github", "CODEOWNERS"))
@@ -193,7 +206,7 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
 			return err
 		}
 
-		commit, err := w.Commit("update CODEOWNERS", &git.CommitOptions{
+		_, err = w.Commit("update CODEOWNERS", &git.CommitOptions{
 			Author: &object.Signature{
 				Name:  "Goliac",
 				Email: config.Config.GoliacEmail,
@@ -205,14 +218,20 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool) error {
 			return err
 		}
 
-		_, err = g.repo.CommitObject(commit)
+		refSpec := fmt.Sprintf("%s:refs/heads/%s", headRef.Name(), branch)
+		err = g.repo.Push(&git.PushOptions{
+			RemoteName: "origin",
+			Auth: &http.BasicAuth{
+				Username: "x-access-token", // This can be anything except an empty string
+				Password: accesstoken,
+			},
+			Force:    true,
+			RefSpecs: []goconfig.RefSpec{goconfig.RefSpec(refSpec)},
+		})
+
 		if err != nil {
-			return err
+			return fmt.Errorf("Error pushing to remote: %v", err)
 		}
-
-		err = g.repo.Push(&git.PushOptions{})
-
-		return err
 	}
 	return nil
 }

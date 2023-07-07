@@ -2,6 +2,7 @@ package internal
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/Alayacare/goliac/internal/config"
 	"github.com/Alayacare/goliac/internal/github"
@@ -113,6 +114,16 @@ type GraplQLUsers struct {
 			} `json:"membersWithRole"`
 		}
 	}
+	Errors []struct {
+		Path []struct {
+			Query string `json:"query"`
+		} `json:"path"`
+		Extensions struct {
+			Code         string
+			ErrorMessage string
+		} `json:"extensions"`
+		Message string
+	} `json:"errors"`
 }
 
 func (g *GoliacRemoteImpl) loadOrgUsers() error {
@@ -132,6 +143,9 @@ func (g *GoliacRemoteImpl) loadOrgUsers() error {
 		err = json.Unmarshal(data, &gResult)
 		if err != nil {
 			return err
+		}
+		if len(gResult.Errors) > 0 {
+			return fmt.Errorf("Graphql error: %v", gResult.Errors[0].Message)
 		}
 
 		for _, c := range gResult.Data.Organization.MembersWithRole.Nodes {
@@ -187,6 +201,16 @@ type GraplQLRepositories struct {
 			} `json:"repositories"`
 		}
 	}
+	Errors []struct {
+		Path []struct {
+			Query string `json:"query"`
+		} `json:"path"`
+		Extensions struct {
+			Code         string
+			ErrorMessage string
+		} `json:"extensions"`
+		Message string
+	} `json:"errors"`
 }
 
 func (g *GoliacRemoteImpl) loadRepositories() error {
@@ -206,6 +230,9 @@ func (g *GoliacRemoteImpl) loadRepositories() error {
 		err = json.Unmarshal(data, &gResult)
 		if err != nil {
 			return err
+		}
+		if len(gResult.Errors) > 0 {
+			return fmt.Errorf("Graphql error: %v", gResult.Errors[0].Message)
 		}
 
 		for _, c := range gResult.Data.Organization.Repositories.Nodes {
@@ -263,10 +290,20 @@ type GraplQLTeams struct {
 			} `json:"teams"`
 		}
 	}
+	Errors []struct {
+		Path []struct {
+			Query string `json:"query"`
+		} `json:"path"`
+		Extensions struct {
+			Code         string
+			ErrorMessage string
+		} `json:"extensions"`
+		Message string
+	} `json:"errors"`
 }
 
 const listAllTeamsReposInOrg = `
-query listAllTeamsReposInOrg($orgLogin: String!, $teamSlug: String, $endCursor: String) {
+query listAllTeamsReposInOrg($orgLogin: String!, $teamSlug: String!, $endCursor: String) {
   organization(login: $orgLogin) {
     team(slug: $teamSlug) {
        repositories(first: 100, after: $endCursor) {
@@ -307,6 +344,16 @@ type GraplQLTeamsRepos struct {
 			} `json:"team"`
 		}
 	}
+	Errors []struct {
+		Path []struct {
+			Query string `json:"query"`
+		} `json:"path"`
+		Extensions struct {
+			Code         string
+			ErrorMessage string
+		} `json:"extensions"`
+		Message string
+	} `json:"errors"`
 }
 
 func (g *GoliacRemoteImpl) Load() error {
@@ -345,7 +392,7 @@ func (g *GoliacRemoteImpl) Load() error {
 func (g *GoliacRemoteImpl) loadTeamRepos(teamSlug string) (map[string]*GithubTeamRepo, error) {
 	variables := make(map[string]interface{})
 	variables["orgLogin"] = config.Config.GithubAppOrganization
-	variables["slug"] = teamSlug
+	variables["teamSlug"] = teamSlug
 	variables["endCursor"] = nil
 
 	repos := make(map[string]*GithubTeamRepo)
@@ -360,6 +407,9 @@ func (g *GoliacRemoteImpl) loadTeamRepos(teamSlug string) (map[string]*GithubTea
 		err = json.Unmarshal(data, &gResult)
 		if err != nil {
 			return nil, err
+		}
+		if len(gResult.Errors) > 0 {
+			return nil, fmt.Errorf("Graphql error: %v", gResult.Errors[0].Message)
 		}
 
 		for _, c := range gResult.Data.Organization.Team.Repository.Edges {
@@ -382,14 +432,13 @@ func (g *GoliacRemoteImpl) loadTeamRepos(teamSlug string) (map[string]*GithubTea
 }
 
 const listAllTeamMembersInOrg = `
-query listAllTeamMembersInOrg($orgLogin: String!, $teamSlug: String, $endCursor: String) {
+query listAllTeamMembersInOrg($orgLogin: String!, $teamSlug: String!, $endCursor: String) {
     organization(login: $orgLogin) {
       team(slug: $teamSlug) {
         members(first: 100, after: $endCursor) {
           edges {
             node {
               login
-              name
             }
           }
           pageInfo {
@@ -411,7 +460,6 @@ type GraplQLTeamMembers struct {
 					Edges []struct {
 						Node struct {
 							Login string
-							Name  string
 						}
 					} `json:"edges"`
 					PageInfo struct {
@@ -423,6 +471,16 @@ type GraplQLTeamMembers struct {
 			} `json:"team"`
 		}
 	}
+	Errors []struct {
+		Path []struct {
+			Query string `json:"query"`
+		} `json:"path"`
+		Extensions struct {
+			Code         string
+			ErrorMessage string
+		} `json:"extensions"`
+		Message string
+	} `json:"errors"`
 }
 
 func (g *GoliacRemoteImpl) loadTeams() error {
@@ -443,6 +501,9 @@ func (g *GoliacRemoteImpl) loadTeams() error {
 		err = json.Unmarshal(data, &gResult)
 		if err != nil {
 			return err
+		}
+		if len(gResult.Errors) > 0 {
+			return fmt.Errorf("Graphql error: %v", gResult.Errors[0].Message)
 		}
 
 		for _, c := range gResult.Data.Organization.Teams.Nodes {
@@ -479,6 +540,9 @@ func (g *GoliacRemoteImpl) loadTeams() error {
 			err = json.Unmarshal(data, &gResult)
 			if err != nil {
 				return err
+			}
+			if len(gResult.Errors) > 0 {
+				return fmt.Errorf("Graphql error: %v", gResult.Errors[0].Message)
 			}
 
 			for _, c := range gResult.Data.Organization.Team.Members.Edges {

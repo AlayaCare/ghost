@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -239,7 +240,11 @@ func (client *GitHubClientImpl) CallRestAPI(endpoint, method string, body map[st
 		}
 		bodyReader = bytes.NewBuffer(jsonBody)
 	}
-	req, err := http.NewRequest(method, client.gitHubServer+"/"+endpoint, bodyReader)
+	urlpath, err := url.JoinPath(client.gitHubServer, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(method, urlpath, bodyReader)
 	if err != nil {
 		return nil, err
 	}
