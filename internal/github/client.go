@@ -126,9 +126,9 @@ func NewGitHubClientImpl(githubServer, organizationName, appID, privateKeyFile s
 	return client, nil
 }
 
-// waitRateLimix helps dealing with rate limits
+// waitRateLimit helps dealing with rate limits
 // cf https://docs.github.com/en/rest/guides/best-practices-for-integrators?apiVersion=2022-11-28#dealing-with-rate-limits
-func waitRateLimix(resetTimeStr string) error {
+func waitRateLimit(resetTimeStr string) error {
 	if resetTimeStr == "" {
 		return fmt.Errorf("X-RateLimit-Reset header not found")
 	}
@@ -202,7 +202,7 @@ func (client *GitHubClientImpl) QueryGraphQLAPI(query string, variables map[stri
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		// We're being rate limited. Get the reset time from the headers.
-		if err := waitRateLimix(resp.Header.Get("X-RateLimit-Reset")); err != nil {
+		if err := waitRateLimit(resp.Header.Get("X-RateLimit-Reset")); err != nil {
 			return nil, err
 		}
 
@@ -259,7 +259,7 @@ func (client *GitHubClientImpl) CallRestAPI(endpoint, method string, body map[st
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		// We're being rate limited. Get the reset time from the headers.
-		if err := waitRateLimix(resp.Header.Get("X-RateLimit-Reset")); err != nil {
+		if err := waitRateLimit(resp.Header.Get("X-RateLimit-Reset")); err != nil {
 			return nil, err
 		}
 
