@@ -174,9 +174,8 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool, accesstoken str
 	codeownerpath := path.Join(w.Filesystem.Root(), ".github", "CODEOWNERS")
 	var content []byte
 
-	_, err = os.Stat(codeownerpath)
-	if os.IsExist(err) {
-
+	info, err := os.Stat(codeownerpath)
+	if err == nil && !info.IsDir() {
 		file, err := os.Open(codeownerpath)
 		defer file.Close()
 
