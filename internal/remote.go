@@ -3,6 +3,7 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/Alayacare/goliac/internal/config"
 	"github.com/Alayacare/goliac/internal/github"
@@ -372,6 +373,23 @@ func (g *GoliacRemoteImpl) Load() error {
 		return err
 	}
 
+	if config.Config.GithubConcurrentThreads <= 1 {
+		err = g.loadTeamReposNonConcurrently()
+	} else {
+		err = g.loadTeamReposConcurrently(config.Config.GithubConcurrentThreads)
+	}
+	if err != nil {
+		return err
+	}
+
+	logrus.Infof("Nb remote users: %d", len(g.users))
+	logrus.Infof("Nb remote teams: %d", len(g.teams))
+	logrus.Infof("Nb remote repositories: %d", len(g.repositories))
+
+	return nil
+}
+
+func (g *GoliacRemoteImpl) loadTeamReposNonConcurrently() error {
 	g.teamRepos = make(map[string]map[string]*GithubTeamRepo)
 
 	for teamSlug := range g.teams {
@@ -381,10 +399,65 @@ func (g *GoliacRemoteImpl) Load() error {
 		}
 		g.teamRepos[teamSlug] = repos
 	}
+	return nil
+}
 
-	logrus.Infof("Nb remote users: %d", len(g.users))
-	logrus.Infof("Nb remote teams: %d", len(g.teams))
-	logrus.Infof("Nb remote repositories: %d", len(g.repositories))
+func (g *GoliacRemoteImpl) loadTeamReposConcurrently(maxGoroutines int) error {
+	g.teamRepos = make(map[string]map[string]*GithubTeamRepo)
+
+	var wg sync.WaitGroup
+
+	// Create buffered channels
+	teamsChan := make(chan string, len(g.teams))
+	errChan := make(chan error, 1) // will hold the first error
+	reposChan := make(chan struct {
+		teamSlug string
+		repos    map[string]*GithubTeamRepo
+	}, len(g.teams))
+
+	// Create worker goroutines
+	for i := 0; i < maxGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for slug := range teamsChan {
+				repos, err := g.loadTeamRepos(slug)
+				if err != nil {
+					// Try to report the error
+					select {
+					case errChan <- err:
+					default:
+					}
+					return
+				}
+				reposChan <- struct {
+					teamSlug string
+					repos    map[string]*GithubTeamRepo
+				}{slug, repos}
+			}
+		}()
+	}
+
+	// Send teams to teamsChan
+	for teamSlug := range g.teams {
+		teamsChan <- teamSlug
+	}
+	close(teamsChan)
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+	close(reposChan)
+
+	// Check if any goroutine returned an error
+	select {
+	case err := <-errChan:
+		return err
+	default:
+		// No error, populate the teamRepos map
+		for r := range reposChan {
+			g.teamRepos[r.teamSlug] = r.repos
+		}
+	}
 
 	return nil
 }
