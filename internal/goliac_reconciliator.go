@@ -10,22 +10,17 @@ import (
  * GoliacReconciliator is here to sync the local state to the remote state
  */
 type GoliacReconciliator interface {
-	AddListener(ReconciliatorListener)
 	Reconciliate(local GoliacLocal, remote GoliacRemote, dryrun bool) error
 }
 
 type GoliacReconciliatorImpl struct {
-	listeners []ReconciliatorListener
+	listener ReconciliatorListener
 }
 
-func NewGoliacReconciliatorImpl() GoliacReconciliator {
+func NewGoliacReconciliatorImpl(listener ReconciliatorListener) GoliacReconciliator {
 	return &GoliacReconciliatorImpl{
-		listeners: make([]ReconciliatorListener, 0),
+		listener: listener,
 	}
-}
-
-func (r *GoliacReconciliatorImpl) AddListener(l ReconciliatorListener) {
-	r.listeners = append(r.listeners, l)
 }
 
 func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacRemote, dryrun bool) error {
@@ -337,145 +332,113 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 func (r *GoliacReconciliatorImpl) AddUserToOrg(dryrun bool, remote *MutableGoliacRemoteImpl, ghuserid string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "add_user_to_org"}).Infof("ghusername: %s", ghuserid)
 	remote.AddUserToOrg(ghuserid)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.AddUserToOrg(ghuserid)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.AddUserToOrg(ghuserid)
 	}
 }
 
 func (r *GoliacReconciliatorImpl) RemoveUserFromOrg(dryrun bool, remote *MutableGoliacRemoteImpl, ghuserid string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "remove_user_from_org"}).Infof("ghusername: %s", ghuserid)
 	remote.RemoveUserFromOrg(ghuserid)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.RemoveUserFromOrg(ghuserid)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.RemoveUserFromOrg(ghuserid)
 	}
 }
 
 func (r *GoliacReconciliatorImpl) CreateTeam(dryrun bool, remote *MutableGoliacRemoteImpl, teamname string, description string, members []string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "create_team"}).Infof("teamname: %s, members: %s", teamname, strings.Join(members, ","))
 	remote.CreateTeam(teamname, description, members)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.CreateTeam(teamname, description, members)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.CreateTeam(teamname, description, members)
 	}
 }
 func (r *GoliacReconciliatorImpl) UpdateTeamAddMember(dryrun bool, remote *MutableGoliacRemoteImpl, teamslug string, username string, role string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_team_add_member"}).Infof("teamslug: %s, username: %s, role: %s", teamslug, username, role)
 	remote.UpdateTeamAddMember(teamslug, username, "member")
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.UpdateTeamAddMember(teamslug, username, "member")
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.UpdateTeamAddMember(teamslug, username, "member")
 	}
 }
 func (r *GoliacReconciliatorImpl) UpdateTeamRemoveMember(dryrun bool, remote *MutableGoliacRemoteImpl, teamslug string, username string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_team_remove_member"}).Infof("teamslug: %s, username: %s", teamslug, username)
 	remote.UpdateTeamRemoveMember(teamslug, username)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.UpdateTeamRemoveMember(teamslug, username)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.UpdateTeamRemoveMember(teamslug, username)
 	}
 }
 func (r *GoliacReconciliatorImpl) DeleteTeam(dryrun bool, remote *MutableGoliacRemoteImpl, teamslug string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "delete_team"}).Infof("teamslug: %s", teamslug)
 	remote.DeleteTeam(teamslug)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.DeleteTeam(teamslug)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.DeleteTeam(teamslug)
 	}
 }
 func (r *GoliacReconciliatorImpl) CreateRepository(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, descrition string, writers []string, readers []string, public bool) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "create_repository"}).Infof("repositoryname: %s, readers: %s, writers: %s, public: %v", reponame, strings.Join(readers, ","), strings.Join(writers, ","), public)
 	remote.CreateRepository(reponame, reponame, writers, readers, public)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.CreateRepository(reponame, reponame, writers, readers, public)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.CreateRepository(reponame, reponame, writers, readers, public)
 	}
 }
 func (r *GoliacReconciliatorImpl) UpdateRepositoryAddTeamAccess(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, teamslug string, permission string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_repository_add_team"}).Infof("repositoryname: %s, teamslug: %s, permission: %s", reponame, teamslug, permission)
 	remote.UpdateRepositoryAddTeamAccess(reponame, teamslug, permission)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.UpdateRepositoryAddTeamAccess(reponame, teamslug, permission)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.UpdateRepositoryAddTeamAccess(reponame, teamslug, permission)
 	}
 }
 
 func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdateTeamAccess(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, teamslug string, permission string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_repository_update_team"}).Infof("repositoryname: %s, teamslug:%s, permission: %s", reponame, teamslug, permission)
 	remote.UpdateRepositoryUpdateTeamAccess(reponame, teamslug, permission)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.UpdateRepositoryUpdateTeamAccess(reponame, teamslug, permission)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.UpdateRepositoryUpdateTeamAccess(reponame, teamslug, permission)
 	}
 
 }
 func (r *GoliacReconciliatorImpl) UpdateRepositoryRemoveTeamAccess(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, teamslug string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_repository_remove_team"}).Infof("repositoryname: %s, teamslug:%s", reponame, teamslug)
 	remote.UpdateRepositoryRemoveTeamAccess(reponame, teamslug)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.UpdateRepositoryRemoveTeamAccess(reponame, teamslug)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.UpdateRepositoryRemoveTeamAccess(reponame, teamslug)
 	}
 }
 func (r *GoliacReconciliatorImpl) DeleteRepository(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "delete_repository"}).Infof("repositoryname: %s", reponame)
 	remote.DeleteRepository(reponame)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.DeleteRepository(reponame)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.DeleteRepository(reponame)
 	}
 }
 func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdatePrivate(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, private bool) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_repository_update_private"}).Infof("repositoryname: %s private:%v", reponame, private)
 	remote.UpdateRepositoryUpdatePrivate(reponame, private)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.UpdateRepositoryUpdatePrivate(reponame, private)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.UpdateRepositoryUpdatePrivate(reponame, private)
 	}
 }
 func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdateArchived(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, archived bool) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_repository_update_archived"}).Infof("repositoryname: %s archived:%v", reponame, archived)
 	remote.UpdateRepositoryUpdateArchived(reponame, archived)
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.UpdateRepositoryUpdateArchived(reponame, archived)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.UpdateRepositoryUpdateArchived(reponame, archived)
 	}
 }
 func (r *GoliacReconciliatorImpl) Begin(dryrun bool) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun}).Infof("reconciliation begin")
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.Begin()
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.Begin()
 	}
 }
 func (r *GoliacReconciliatorImpl) Rollback(dryrun bool, err error) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun}).Infof("reconciliation rollback")
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.Rollback(err)
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.Rollback(err)
 	}
 }
 func (r *GoliacReconciliatorImpl) Commit(dryrun bool) {
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun}).Infof("reconciliation commit")
-	if !dryrun {
-		for _, l := range r.listeners {
-			l.Commit()
-		}
+	if !dryrun && r.listener != nil {
+		r.listener.Commit()
 	}
 }

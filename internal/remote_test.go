@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/Alayacare/goliac/internal/config"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/vektah/gqlparser/v2/ast"
@@ -392,11 +393,11 @@ func TestRemoteRepository(t *testing.T) {
 
 	// happy path
 	t.Run("happy path: load remote repositories", func(t *testing.T) {
+		// MockGithubClient doesn't support concurrent access
+		config.Config.GithubConcurrentThreads = 1
 		client := MockGithubClient{}
 
-		remote := NewGoliacRemoteImpl(&client)
-
-		remoteImpl := remote.(*GoliacRemoteImpl)
+		remoteImpl := NewGoliacRemoteImpl(&client)
 
 		err := remoteImpl.loadRepositories()
 		assert.Nil(t, err)
@@ -407,11 +408,12 @@ func TestRemoteRepository(t *testing.T) {
 		assert.Equal(t, true, remoteImpl.repositories["repo_10"].IsPrivate)
 	})
 	t.Run("happy path: load remote teams", func(t *testing.T) {
+		// MockGithubClient doesn't support concurrent access
+		config.Config.GithubConcurrentThreads = 1
 		client := MockGithubClient{}
 
-		remote := NewGoliacRemoteImpl(&client)
+		remoteImpl := NewGoliacRemoteImpl(&client)
 
-		remoteImpl := remote.(*GoliacRemoteImpl)
 		err := remoteImpl.loadTeams()
 		assert.Nil(t, err)
 		assert.Equal(t, 122, len(remoteImpl.teams))
@@ -419,11 +421,12 @@ func TestRemoteRepository(t *testing.T) {
 	})
 
 	t.Run("happy path: load remote team's repos", func(t *testing.T) {
+		// MockGithubClient doesn't support concurrent access
+		config.Config.GithubConcurrentThreads = 1
 		client := MockGithubClient{}
 
-		remote := NewGoliacRemoteImpl(&client)
+		remoteImpl := NewGoliacRemoteImpl(&client)
 
-		remoteImpl := remote.(*GoliacRemoteImpl)
 		repos, err := remoteImpl.loadTeamRepos("team-1")
 		assert.Nil(t, err)
 		assert.Equal(t, 2, len(repos))
@@ -431,11 +434,12 @@ func TestRemoteRepository(t *testing.T) {
 	})
 
 	t.Run("happy path: load remote teams and team's repos", func(t *testing.T) {
+		// MockGithubClient doesn't support concurrent access
+		config.Config.GithubConcurrentThreads = 1
 		client := MockGithubClient{}
 
-		remote := NewGoliacRemoteImpl(&client)
+		remoteImpl := NewGoliacRemoteImpl(&client)
 
-		remoteImpl := remote.(*GoliacRemoteImpl)
 		err := remoteImpl.Load()
 		assert.Nil(t, err)
 		assert.Equal(t, 122, len(remoteImpl.teams))

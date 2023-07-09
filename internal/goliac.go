@@ -49,14 +49,15 @@ func NewGoliacImpl() (Goliac, error) {
 		return nil, err
 	}
 
-	reconciliator := NewGoliacReconciliatorImpl()
-	ga := NewGithubApplyListener(githubClient)
-	reconciliator.AddListener(ga)
+	remote := NewGoliacRemoteImpl(githubClient)
+
+	ga := NewGithubApplyListener(remote)
+	reconciliator := NewGoliacReconciliatorImpl(ga)
 
 	return &GoliacImpl{
 		local:         NewGoliacLocalImpl(),
 		githubClient:  githubClient,
-		remote:        NewGoliacRemoteImpl(githubClient),
+		remote:        remote,
 		reconciliator: reconciliator,
 	}, nil
 }

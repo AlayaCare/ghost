@@ -22,6 +22,21 @@ type Repository struct {
 	Owner *string // implicit. team name owning the repo (if any)
 }
 
+// set default values
+func (ms *Repository) UnmarshalYAML(value *yaml.Node) error {
+	type myStructAlias Repository // Create a new alias type to avoid recursion
+	x := &myStructAlias{}
+	x.Data.IsPublic = false
+	x.Data.IsArchived = false
+
+	if err := value.Decode(x); err != nil {
+		return err
+	}
+
+	*ms = Repository(*x)
+	return nil
+}
+
 /*
  * NewRepository reads a file and returns a Repository object
  * The next step is to validate the Repository object using the Validate method

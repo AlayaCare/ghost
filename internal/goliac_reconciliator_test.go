@@ -163,9 +163,8 @@ func (r *ReconciliatorListenerRecorder) Commit() {
 func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: new team", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -202,9 +201,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: new team with non english slug", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -241,9 +239,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: existing team with new members", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -298,9 +295,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: existing team with non english slug with new members", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -357,10 +353,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: removed team", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
-
+		r := NewGoliacReconciliatorImpl(recorder)
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
@@ -387,9 +381,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: new repo without owner", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -416,9 +409,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: new repo with owner", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -459,9 +451,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: existing repo with new owner (from read to write)", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -516,9 +507,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: add a team to an existing repo", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -585,9 +575,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: remove a team from an existing repo", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -659,9 +648,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: remove a team member", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -717,9 +705,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: add a team AND add it to an existing repo", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -779,9 +766,8 @@ func TestReconciliation(t *testing.T) {
 	})
 
 	t.Run("happy path: removed repo", func(t *testing.T) {
-		r := NewGoliacReconciliatorImpl()
 		recorder := NewReconciliatorListenerRecorder()
-		r.AddListener(recorder)
+		r := NewGoliacReconciliatorImpl(recorder)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
