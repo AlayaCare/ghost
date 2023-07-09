@@ -14,44 +14,44 @@ type GithubCommand interface {
 }
 
 /*
- * GithubApplyListener will collects all commands to apply
+ * GithubBatchExecutor will collects all commands to apply
  * if there the number of changes to apply is not too big, it will apply on the `Commit()`
  * Usage:
- * gal := NewGithubApplyListener(client)
+ * gal := NewGithubBatchExecutor(client)
  * gal.Begin()
  * gal.Create...
  * gal.Update...
  * ...
  * gal.Commit()
  */
-type GithubApplyListener struct {
-	client   ReconciliatorListener
+type GithubBatchExecutor struct {
+	client   ReconciliatorExecutor
 	commands []GithubCommand
 }
 
-func NewGithubApplyListener(client ReconciliatorListener) *GithubApplyListener {
-	gal := GithubApplyListener{
+func NewGithubBatchExecutor(client ReconciliatorExecutor) *GithubBatchExecutor {
+	gal := GithubBatchExecutor{
 		client:   client,
 		commands: make([]GithubCommand, 0),
 	}
 	return &gal
 }
 
-func (g *GithubApplyListener) AddUserToOrg(ghuserid string) {
+func (g *GithubBatchExecutor) AddUserToOrg(ghuserid string) {
 	g.commands = append(g.commands, &GithubCommandAddUserToOrg{
 		client:   g.client,
 		ghuserid: ghuserid,
 	})
 }
 
-func (g *GithubApplyListener) RemoveUserFromOrg(ghuserid string) {
+func (g *GithubBatchExecutor) RemoveUserFromOrg(ghuserid string) {
 	g.commands = append(g.commands, &GithubCommandAddUserToOrg{
 		client:   g.client,
 		ghuserid: ghuserid,
 	})
 }
 
-func (g *GithubApplyListener) CreateTeam(teamname string, description string, members []string) {
+func (g *GithubBatchExecutor) CreateTeam(teamname string, description string, members []string) {
 	g.commands = append(g.commands, &GithubCommandCreateTeam{
 		client:      g.client,
 		teamname:    teamname,
@@ -61,7 +61,7 @@ func (g *GithubApplyListener) CreateTeam(teamname string, description string, me
 }
 
 // role = member or maintainer (usually we use member)
-func (g *GithubApplyListener) UpdateTeamAddMember(teamslug string, username string, role string) {
+func (g *GithubBatchExecutor) UpdateTeamAddMember(teamslug string, username string, role string) {
 	g.commands = append(g.commands, &GithubCommandUpdateTeamAddMember{
 		client:   g.client,
 		teamslug: teamslug,
@@ -70,7 +70,7 @@ func (g *GithubApplyListener) UpdateTeamAddMember(teamslug string, username stri
 	})
 }
 
-func (g *GithubApplyListener) UpdateTeamRemoveMember(teamslug string, username string) {
+func (g *GithubBatchExecutor) UpdateTeamRemoveMember(teamslug string, username string) {
 	g.commands = append(g.commands, &GithubCommandUpdateTeamRemoveMember{
 		client:   g.client,
 		teamslug: teamslug,
@@ -78,14 +78,14 @@ func (g *GithubApplyListener) UpdateTeamRemoveMember(teamslug string, username s
 	})
 }
 
-func (g *GithubApplyListener) DeleteTeam(teamslug string) {
+func (g *GithubBatchExecutor) DeleteTeam(teamslug string) {
 	g.commands = append(g.commands, &GithubCommandDeleteTeam{
 		client:   g.client,
 		teamslug: teamslug,
 	})
 }
 
-func (g *GithubApplyListener) CreateRepository(reponame string, description string, writers []string, readers []string, public bool) {
+func (g *GithubBatchExecutor) CreateRepository(reponame string, description string, writers []string, readers []string, public bool) {
 	g.commands = append(g.commands, &GithubCommandCreateRepository{
 		client:      g.client,
 		reponame:    reponame,
@@ -96,7 +96,7 @@ func (g *GithubApplyListener) CreateRepository(reponame string, description stri
 	})
 }
 
-func (g *GithubApplyListener) UpdateRepositoryAddTeamAccess(reponame string, teamslug string, permission string) {
+func (g *GithubBatchExecutor) UpdateRepositoryAddTeamAccess(reponame string, teamslug string, permission string) {
 	g.commands = append(g.commands, &GithubCommandUpdateRepositoryAddTeamAccess{
 		client:     g.client,
 		reponame:   reponame,
@@ -105,7 +105,7 @@ func (g *GithubApplyListener) UpdateRepositoryAddTeamAccess(reponame string, tea
 	})
 }
 
-func (g *GithubApplyListener) UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) {
+func (g *GithubBatchExecutor) UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) {
 	g.commands = append(g.commands, &GithubCommandUpdateRepositoryUpdateTeamAccess{
 		client:     g.client,
 		reponame:   reponame,
@@ -114,7 +114,7 @@ func (g *GithubApplyListener) UpdateRepositoryUpdateTeamAccess(reponame string, 
 	})
 }
 
-func (g *GithubApplyListener) UpdateRepositoryRemoveTeamAccess(reponame string, teamslug string) {
+func (g *GithubBatchExecutor) UpdateRepositoryRemoveTeamAccess(reponame string, teamslug string) {
 	g.commands = append(g.commands, &GithubCommandUpdateRepositoryRemoveTeamAccess{
 		client:   g.client,
 		reponame: reponame,
@@ -122,7 +122,7 @@ func (g *GithubApplyListener) UpdateRepositoryRemoveTeamAccess(reponame string, 
 	})
 }
 
-func (g *GithubApplyListener) UpdateRepositoryUpdatePrivate(reponame string, private bool) {
+func (g *GithubBatchExecutor) UpdateRepositoryUpdatePrivate(reponame string, private bool) {
 	g.commands = append(g.commands, &GithubCommandUpdateRepositoryUpdatePrivate{
 		client:   g.client,
 		reponame: reponame,
@@ -130,7 +130,7 @@ func (g *GithubApplyListener) UpdateRepositoryUpdatePrivate(reponame string, pri
 	})
 }
 
-func (g *GithubApplyListener) UpdateRepositoryUpdateArchived(reponame string, archived bool) {
+func (g *GithubBatchExecutor) UpdateRepositoryUpdateArchived(reponame string, archived bool) {
 	g.commands = append(g.commands, &GithubCommandUpdateRepositoryUpdateArchived{
 		client:   g.client,
 		reponame: reponame,
@@ -138,20 +138,20 @@ func (g *GithubApplyListener) UpdateRepositoryUpdateArchived(reponame string, ar
 	})
 }
 
-func (g *GithubApplyListener) DeleteRepository(reponame string) {
+func (g *GithubBatchExecutor) DeleteRepository(reponame string) {
 	g.commands = append(g.commands, &GithubCommandDeleteRepository{
 		client:   g.client,
 		reponame: reponame,
 	})
 }
 
-func (g *GithubApplyListener) Begin() {
+func (g *GithubBatchExecutor) Begin() {
 	g.commands = make([]GithubCommand, 0)
 }
-func (g *GithubApplyListener) Rollback(error) {
+func (g *GithubBatchExecutor) Rollback(error) {
 	g.commands = make([]GithubCommand, 0)
 }
-func (g *GithubApplyListener) Commit() {
+func (g *GithubBatchExecutor) Commit() {
 	if len(g.commands) > config.Config.MaxChangesetsPerBatch {
 		logrus.Errorf("More than %d changesets to apply (total of %d), this is suspicious. Aborting", config.Config.MaxChangesetsPerBatch, len(g.commands))
 		return
@@ -163,7 +163,7 @@ func (g *GithubApplyListener) Commit() {
 }
 
 type GithubCommandAddUserToOrg struct {
-	client   ReconciliatorListener
+	client   ReconciliatorExecutor
 	ghuserid string
 }
 
@@ -172,7 +172,7 @@ func (g *GithubCommandAddUserToOrg) Apply() {
 }
 
 type GithubCommandCreateRepository struct {
-	client      ReconciliatorListener
+	client      ReconciliatorExecutor
 	reponame    string
 	description string
 	writers     []string
@@ -185,7 +185,7 @@ func (g *GithubCommandCreateRepository) Apply() {
 }
 
 type GithubCommandCreateTeam struct {
-	client      ReconciliatorListener
+	client      ReconciliatorExecutor
 	teamname    string
 	description string
 	members     []string
@@ -196,7 +196,7 @@ func (g *GithubCommandCreateTeam) Apply() {
 }
 
 type GithubCommandDeleteRepository struct {
-	client   ReconciliatorListener
+	client   ReconciliatorExecutor
 	reponame string
 }
 
@@ -205,7 +205,7 @@ func (g *GithubCommandDeleteRepository) Apply() {
 }
 
 type GithubCommandDeleteTeam struct {
-	client   ReconciliatorListener
+	client   ReconciliatorExecutor
 	teamslug string
 }
 
@@ -214,7 +214,7 @@ func (g *GithubCommandDeleteTeam) Apply() {
 }
 
 type GithubCommandRemoveUserFromOrg struct {
-	client   ReconciliatorListener
+	client   ReconciliatorExecutor
 	ghuserid string
 }
 
@@ -223,7 +223,7 @@ func (g *GithubCommandRemoveUserFromOrg) Apply() {
 }
 
 type GithubCommandUpdateRepositoryRemoveTeamAccess struct {
-	client   ReconciliatorListener
+	client   ReconciliatorExecutor
 	reponame string
 	teamslug string
 }
@@ -233,7 +233,7 @@ func (g *GithubCommandUpdateRepositoryRemoveTeamAccess) Apply() {
 }
 
 type GithubCommandUpdateRepositoryAddTeamAccess struct {
-	client     ReconciliatorListener
+	client     ReconciliatorExecutor
 	reponame   string
 	teamslug   string
 	permission string
@@ -244,7 +244,7 @@ func (g *GithubCommandUpdateRepositoryAddTeamAccess) Apply() {
 }
 
 type GithubCommandUpdateRepositoryUpdateTeamAccess struct {
-	client     ReconciliatorListener
+	client     ReconciliatorExecutor
 	reponame   string
 	teamslug   string
 	permission string
@@ -255,7 +255,7 @@ func (g *GithubCommandUpdateRepositoryUpdateTeamAccess) Apply() {
 }
 
 type GithubCommandUpdateRepositoryUpdateArchived struct {
-	client   ReconciliatorListener
+	client   ReconciliatorExecutor
 	reponame string
 	archived bool
 }
@@ -265,7 +265,7 @@ func (g *GithubCommandUpdateRepositoryUpdateArchived) Apply() {
 }
 
 type GithubCommandUpdateRepositoryUpdatePrivate struct {
-	client   ReconciliatorListener
+	client   ReconciliatorExecutor
 	reponame string
 	private  bool
 }
@@ -275,7 +275,7 @@ func (g *GithubCommandUpdateRepositoryUpdatePrivate) Apply() {
 }
 
 type GithubCommandUpdateTeamAddMember struct {
-	client   ReconciliatorListener
+	client   ReconciliatorExecutor
 	teamslug string
 	member   string
 	role     string
@@ -286,7 +286,7 @@ func (g *GithubCommandUpdateTeamAddMember) Apply() {
 }
 
 type GithubCommandUpdateTeamRemoveMember struct {
-	client   ReconciliatorListener
+	client   ReconciliatorExecutor
 	teamslug string
 	member   string
 }

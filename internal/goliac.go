@@ -51,7 +51,7 @@ func NewGoliacImpl() (Goliac, error) {
 
 	remote := NewGoliacRemoteImpl(githubClient)
 
-	ga := NewGithubApplyListener(remote)
+	ga := NewGithubBatchExecutor(remote)
 	reconciliator := NewGoliacReconciliatorImpl(ga)
 
 	return &GoliacImpl{

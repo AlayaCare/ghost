@@ -1,6 +1,6 @@
 package internal
 
-type ReconciliatorListener interface {
+type ReconciliatorExecutor interface {
 	AddUserToOrg(ghuserid string)
 	RemoveUserFromOrg(ghuserid string)
 
