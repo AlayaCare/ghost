@@ -2,7 +2,11 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"path"
+	"path/filepath"
+	"strings"
 
 	"github.com/Alayacare/goliac/internal"
 	"github.com/sirupsen/logrus"
@@ -57,7 +61,13 @@ https://github.com/...`,
 			if err != nil {
 				logrus.Fatalf("failed to load and validate: %s", err)
 			}
-			err = goliac.ApplyToGithub(true, branch)
+			u, err := url.Parse(repo)
+			if err != nil {
+				logrus.Fatalf("failed to parse %s: %v", repo, err)
+			}
+			teamsreponame := strings.TrimSuffix(path.Base(u.Path), filepath.Ext(path.Base(u.Path)))
+
+			err = goliac.ApplyToGithub(true, teamsreponame, branch)
 			if err != nil {
 				logrus.Fatalf("failed to plan on branch %s: %s", branch, err)
 			}
@@ -85,7 +95,13 @@ https://github.com/...`,
 			if err != nil {
 				logrus.Fatalf("failed to load and validate: %s", err)
 			}
-			err = goliac.ApplyToGithub(false, branch)
+			u, err := url.Parse(repo)
+			if err != nil {
+				logrus.Fatalf("failed to parse %s: %v", repo, err)
+			}
+			teamsreponame := strings.TrimSuffix(path.Base(u.Path), filepath.Ext(path.Base(u.Path)))
+
+			err = goliac.ApplyToGithub(false, teamsreponame, branch)
 			if err != nil {
 				logrus.Fatalf("failed to apply on branch %s: %s", branch, err)
 			}

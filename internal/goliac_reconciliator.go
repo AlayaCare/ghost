@@ -10,7 +10,7 @@ import (
  * GoliacReconciliator is here to sync the local state to the remote state
  */
 type GoliacReconciliator interface {
-	Reconciliate(local GoliacLocal, remote GoliacRemote, dryrun bool) error
+	Reconciliate(local GoliacLocal, remote GoliacRemote, teamreponame string, dryrun bool) error
 }
 
 type GoliacReconciliatorImpl struct {
@@ -23,7 +23,7 @@ func NewGoliacReconciliatorImpl(executor ReconciliatorExecutor) GoliacReconcilia
 	}
 }
 
-func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacRemote, dryrun bool) error {
+func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacRemote, teamsreponame string, dryrun bool) error {
 	rremote := NewMutableGoliacRemoteImpl(remote)
 	r.Begin(dryrun)
 	err := r.reconciliateUsers(local, rremote, dryrun)
@@ -38,7 +38,7 @@ func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacR
 		return err
 	}
 
-	err = r.reconciliateRepositories(local, rremote, dryrun)
+	err = r.reconciliateRepositories(local, rremote, teamsreponame, dryrun)
 	if err != nil {
 		r.Rollback(dryrun, err)
 		return err
@@ -187,7 +187,7 @@ func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote *M
 /*
  * This function sync repositories and team's repositories permissions
  */
-func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, remote *MutableGoliacRemoteImpl, dryrun bool) error {
+func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, remote *MutableGoliacRemoteImpl, teamsreponame string, dryrun bool) error {
 	ghRepos := remote.Repositories()
 	rRepos := make(map[string]*GithubRepository)
 	for k, v := range ghRepos {
@@ -219,6 +219,14 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 			for _, r := range lRepo.Data.Readers {
 				readers = append(readers, remote.TeamSlugByName()[r])
 			}
+
+			// special case for the teams repo
+			if reponame == teamsreponame {
+				for teamname := range local.Teams() {
+					writers = append(writers, remote.TeamSlugByName()[teamname]+"-owners")
+				}
+			}
+
 			// CREATE repository
 			r.CreateRepository(dryrun, remote, reponame, reponame, writers, readers, lRepo.Data.IsPublic)
 		} else {
@@ -236,6 +244,13 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 			}
 			if lRepo.Owner != nil {
 				localWriteMembers[*lRepo.Owner] = true
+			}
+
+			// special case for the teams repo
+			if reponame == teamsreponame {
+				for teamname := range local.Teams() {
+					localWriteMembers[teamname+"-owners"] = true
+				}
 			}
 
 			// let's get remote teams per type (read/write)
@@ -323,7 +338,7 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 
 	// remaining (GH) teams (aka not found locally)
 	for reponame := range rRepos {
-		// DELETE team
+		// DELETE repository
 		r.DeleteRepository(dryrun, remote, reponame)
 	}
 	return nil

@@ -193,7 +193,7 @@ func TestReconciliation(t *testing.T) {
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
 		}
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 2 members created
 		assert.Equal(t, 2, len(recorder.TeamsCreated["new"]))
@@ -231,7 +231,7 @@ func TestReconciliation(t *testing.T) {
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
 		}
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 2 members created
 		assert.Equal(t, 2, len(recorder.TeamsCreated["nouveauté"]))
@@ -287,7 +287,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.teams["existing-owners"] = existingowners
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 members added
 		assert.Equal(t, 0, len(recorder.TeamsCreated))
@@ -344,7 +344,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.teams["exist-ing-owners"] = existingowners
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 members added
 		assert.Equal(t, "exist-ing", remote.TeamSlugByName()["exist ing"])
@@ -374,7 +374,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.teams["removing"] = removing
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 team deleted
 		assert.Equal(t, 1, len(recorder.TeamDeleted))
@@ -402,7 +402,7 @@ func TestReconciliation(t *testing.T) {
 			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
 		}
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 repo created
 		assert.Equal(t, 1, len(recorder.RepositoryCreated))
@@ -444,7 +444,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.teams["existing"] = existing
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 repo created
 		assert.Equal(t, 1, len(recorder.RepositoryCreated))
@@ -496,7 +496,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "pull",
 		}
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 team updated
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -564,7 +564,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "push",
 		}
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 team added
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -637,7 +637,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "pull",
 		}
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 team removed
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -693,7 +693,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "push",
 		}
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 member removed
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -756,7 +756,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "push",
 		}
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 repo updated
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -786,7 +786,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.repos["removing"] = removing
 
-		r.Reconciliate(&local, &remote, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 repo deleted
 		assert.Equal(t, 1, len(recorder.RepositoriesDeleted))

@@ -21,7 +21,7 @@ type Goliac interface {
 	LoadAndValidateGoliacOrganization(repositoryUrl, branch string) error
 
 	// You need to call LoadAndValidategoliacOrganization before calling this function
-	ApplyToGithub(dryrun bool, branch string) error
+	ApplyToGithub(dryrun bool, teamreponame string, branch string) error
 
 	// You dont need to call LoadAndValidategoliacOrganization before calling this function
 	UsersUpdate(repositoryUrl, branch string) error
@@ -95,13 +95,13 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 	return nil
 }
 
-func (g *GoliacImpl) ApplyToGithub(dryrun bool, branch string) error {
+func (g *GoliacImpl) ApplyToGithub(dryrun bool, teamreponame string, branch string) error {
 	err := g.remote.Load()
 	if err != nil {
 		return fmt.Errorf("Error when fetching data from Github: %v", err)
 	}
 
-	err = g.reconciliator.Reconciliate(g.local, g.remote, dryrun)
+	err = g.reconciliator.Reconciliate(g.local, g.remote, teamreponame, dryrun)
 	if err != nil {
 		return fmt.Errorf("Error when reconciliating: %v", err)
 	}
