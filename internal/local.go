@@ -147,7 +147,7 @@ func (g *GoliacLocalImpl) codeowners_regenerate() string {
 	sort.Sort(sort.StringSlice(teamsnames))
 
 	for _, t := range teamsnames {
-		codeowners += fmt.Sprintf("/org/%s @%s/%s\n", t, config.Config.GithubAppOrganization, slugify.Make(t))
+		codeowners += fmt.Sprintf("/teams/%s @%s/%s-owners\n", t, config.Config.GithubAppOrganization, slugify.Make(t))
 	}
 
 	return codeowners
