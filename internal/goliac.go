@@ -31,10 +31,10 @@ type Goliac interface {
 }
 
 type GoliacImpl struct {
-	local         GoliacLocal
-	remote        GoliacRemote
-	githubClient  github.GitHubClient
-	reconciliator GoliacReconciliator
+	local        GoliacLocal
+	remote       GoliacRemoteExecutor
+	githubClient github.GitHubClient
+	repoconfig   *config.RepositoryConfig
 }
 
 func NewGoliacImpl() (Goliac, error) {
@@ -51,14 +51,11 @@ func NewGoliacImpl() (Goliac, error) {
 
 	remote := NewGoliacRemoteImpl(githubClient)
 
-	ga := NewGithubBatchExecutor(remote)
-	reconciliator := NewGoliacReconciliatorImpl(ga)
-
 	return &GoliacImpl{
-		local:         NewGoliacLocalImpl(),
-		githubClient:  githubClient,
-		remote:        remote,
-		reconciliator: reconciliator,
+		local:        NewGoliacLocalImpl(),
+		githubClient: githubClient,
+		remote:       remote,
+		repoconfig:   &config.RepositoryConfig{},
 	}, nil
 }
 
@@ -75,6 +72,12 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 		if err != nil {
 			return fmt.Errorf("unable to clone: %v", err)
 		}
+		err, repoconfig := g.local.LoadRepoConfig()
+		if err != nil {
+			return fmt.Errorf("unable to read goliac.yaml config file: %v", err)
+		}
+		g.repoconfig = repoconfig
+
 		errs, warns = g.local.LoadAndValidate()
 	} else {
 		// Local
@@ -96,12 +99,15 @@ func (g *GoliacImpl) LoadAndValidateGoliacOrganization(repositoryUrl, branch str
 }
 
 func (g *GoliacImpl) ApplyToGithub(dryrun bool, teamreponame string, branch string) error {
-	err := g.remote.Load()
+	err := g.remote.Load(g.repoconfig)
 	if err != nil {
 		return fmt.Errorf("Error when fetching data from Github: %v", err)
 	}
 
-	err = g.reconciliator.Reconciliate(g.local, g.remote, teamreponame, dryrun)
+	ga := NewGithubBatchExecutor(g.remote, g.repoconfig.MaxChangesets)
+	reconciliator := NewGoliacReconciliatorImpl(ga)
+
+	err = reconciliator.Reconciliate(g.local, g.remote, teamreponame, dryrun)
 	if err != nil {
 		return fmt.Errorf("Error when reconciliating: %v", err)
 	}
@@ -109,7 +115,7 @@ func (g *GoliacImpl) ApplyToGithub(dryrun bool, teamreponame string, branch stri
 	if err != nil {
 		return err
 	}
-	err = g.local.UpdateAndCommitCodeOwners(dryrun, accessToken, branch)
+	err = g.local.UpdateAndCommitCodeOwners(g.repoconfig, dryrun, accessToken, branch)
 	if err != nil {
 		return fmt.Errorf("Error when updating and commiting: %v", err)
 	}
@@ -127,12 +133,17 @@ func (g *GoliacImpl) UsersUpdate(repositoryUrl, branch string) error {
 		return err
 	}
 
-	userplugin, found := usersync.GetUserSyncPlugin(config.Config.UserSyncPlugin)
-	if found == false {
-		return fmt.Errorf("User Sync Plugin %s not found", config.Config.UserSyncPlugin)
+	err, repoconfig := g.local.LoadRepoConfig()
+	if err != nil {
+		return fmt.Errorf("unable to read goliac.yaml config file: %v", err)
 	}
 
-	err = g.local.SyncUsersAndTeams(userplugin, false)
+	userplugin, found := usersync.GetUserSyncPlugin(g.repoconfig.UserSync.Plugin)
+	if found == false {
+		return fmt.Errorf("User Sync Plugin %s not found", g.repoconfig.UserSync.Plugin)
+	}
+
+	err = g.local.SyncUsersAndTeams(repoconfig, userplugin, false)
 	return err
 }
 

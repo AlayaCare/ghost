@@ -20,13 +20,6 @@ var Config = struct {
 	GithubAppPrivateKeyFile string `env:"GOLIAC_GITHUB_APP_PRIVATE_KEY_FILE" envDefault:"github-app-private-key.pem"`
 	GoliacEmail             string `env:"GOLIAC_EMAIL" envDefault:"goliac@alayacare.com"`
 
-	// if we have more than `MaxChangesetPerBatch` gituhb changes to apply, we abort
-	MaxChangesetsPerBatch int `env:"GOLIAC_MAX_CHANGESETS_PER_BATCH" envDefault:"50"`
-
-	UserSyncPlugin                string `env:"GOLIAC_USER_SYNC_PLUGIN" envDefault:"noop"`
-	UserSyncPluginShellScriptPath string `env:"GOLIAC_USER_SYNC_PLUGIN_SHELLSCRIPT_PATH"`
 	// goliacGitRepository string `env:"GOLIAC_GIT_REPOSITORY" envDefault:""`
 	// goliacGitBranch     string `env:"GOLIAC_GIT_BRANCH" envDefault:"main"`
-
-	GithubConcurrentThreads int `env:"GOLIAC_GITHUB_CONCURENT_THREADS" envDefault:"4"`
 }{}

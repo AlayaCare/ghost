@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"github.com/Alayacare/goliac/internal/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,14 +24,16 @@ type GithubCommand interface {
  * gal.Commit()
  */
 type GithubBatchExecutor struct {
-	client   ReconciliatorExecutor
-	commands []GithubCommand
+	client        ReconciliatorExecutor
+	maxChangesets int
+	commands      []GithubCommand
 }
 
-func NewGithubBatchExecutor(client ReconciliatorExecutor) *GithubBatchExecutor {
+func NewGithubBatchExecutor(client ReconciliatorExecutor, maxChangesets int) *GithubBatchExecutor {
 	gal := GithubBatchExecutor{
-		client:   client,
-		commands: make([]GithubCommand, 0),
+		client:        client,
+		maxChangesets: maxChangesets,
+		commands:      make([]GithubCommand, 0),
 	}
 	return &gal
 }
@@ -152,8 +153,8 @@ func (g *GithubBatchExecutor) Rollback(error) {
 	g.commands = make([]GithubCommand, 0)
 }
 func (g *GithubBatchExecutor) Commit() {
-	if len(g.commands) > config.Config.MaxChangesetsPerBatch {
-		logrus.Errorf("More than %d changesets to apply (total of %d), this is suspicious. Aborting", config.Config.MaxChangesetsPerBatch, len(g.commands))
+	if len(g.commands) > g.maxChangesets {
+		logrus.Errorf("More than %d changesets to apply (total of %d), this is suspicious. Aborting", g.maxChangesets, len(g.commands))
 		return
 	}
 	for _, c := range g.commands {

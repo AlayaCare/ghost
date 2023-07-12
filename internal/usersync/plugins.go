@@ -1,6 +1,9 @@
 package usersync
 
-import "github.com/Alayacare/goliac/internal/entity"
+import (
+	"github.com/Alayacare/goliac/internal/config"
+	"github.com/Alayacare/goliac/internal/entity"
+)
 
 func init() {
 	registerPlugins()
@@ -8,7 +11,7 @@ func init() {
 
 type UserSyncPlugin interface {
 	// Get the current user list directory path, returns the new user list
-	UpdateUsers(orguserdirrectorypath string) (map[string]*entity.User, error)
+	UpdateUsers(repoconfig *config.RepositoryConfig, orguserdirrectorypath string) (map[string]*entity.User, error)
 }
 
 var plugins map[string]UserSyncPlugin

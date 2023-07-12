@@ -19,13 +19,18 @@ const FORLOOP_STOP = 100
  */
 type GoliacRemote interface {
 	// Load from a github repository
-	Load() error
+	Load(repoconfig *config.RepositoryConfig) error
 
 	Users() map[string]string
 	TeamSlugByName() map[string]string
 	Teams() map[string]*GithubTeam                           // the key is the team slug
 	Repositories() map[string]*GithubRepository              // the key is the repository name
 	TeamRepositories() map[string]map[string]*GithubTeamRepo // key is team slug, second key is repo name
+}
+
+type GoliacRemoteExecutor interface {
+	GoliacRemote
+	ReconciliatorExecutor
 }
 
 type GithubRepository struct {
@@ -357,7 +362,7 @@ type GraplQLTeamsRepos struct {
 	} `json:"errors"`
 }
 
-func (g *GoliacRemoteImpl) Load() error {
+func (g *GoliacRemoteImpl) Load(repoconfig *config.RepositoryConfig) error {
 	err := g.loadOrgUsers()
 	if err != nil {
 		return err
@@ -373,10 +378,10 @@ func (g *GoliacRemoteImpl) Load() error {
 		return err
 	}
 
-	if config.Config.GithubConcurrentThreads <= 1 {
+	if repoconfig.GithubConcurrentThreads <= 1 {
 		err = g.loadTeamReposNonConcurrently()
 	} else {
-		err = g.loadTeamReposConcurrently(config.Config.GithubConcurrentThreads)
+		err = g.loadTeamReposConcurrently(repoconfig.GithubConcurrentThreads)
 	}
 	if err != nil {
 		return err

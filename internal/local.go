@@ -32,12 +32,15 @@ import (
  */
 type GoliacLocal interface {
 	Clone(accesstoken, repositoryUrl, branch string) error
+
+	LoadRepoConfig() (error, *config.RepositoryConfig)
+
 	// Load and Validate from a github repository
 	LoadAndValidate() ([]error, []entity.Warning)
 	// whenever someone create/delete a team, we must update the github CODEOWNERS
-	UpdateAndCommitCodeOwners(dryrun bool, accesstoken string, branch string) error
+	UpdateAndCommitCodeOwners(repoconfig *config.RepositoryConfig, dryrun bool, accesstoken string, branch string) error
 	// whenever the users list is changing, reload users and teams, and commit them
-	SyncUsersAndTeams(plugin usersync.UserSyncPlugin, dryrun bool) error
+	SyncUsersAndTeams(repoconfig *config.RepositoryConfig, plugin usersync.UserSyncPlugin, dryrun bool) error
 	Close()
 
 	// Load and Validate from a local directory
@@ -137,8 +140,34 @@ func (g *GoliacLocalImpl) Close() {
 	g.repo = nil
 }
 
-func (g *GoliacLocalImpl) codeowners_regenerate() string {
+func (g *GoliacLocalImpl) LoadRepoConfig() (error, *config.RepositoryConfig) {
+	if g.repo == nil {
+		return fmt.Errorf("git repository not cloned"), nil
+	}
+	w, err := g.repo.Worktree()
+	if err != nil {
+		return err, nil
+	}
+
+	var repoconfig config.RepositoryConfig
+	file, err := os.Open(path.Join(w.Filesystem.Root(), "goliac.yaml"))
+	defer file.Close()
+
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		return fmt.Errorf("not able to find the /goliac.yaml configuration file: %v", err), nil
+	}
+	err = yaml.Unmarshal(content, &repoconfig)
+	if err != nil {
+		return fmt.Errorf("not able to unmarshall the /goliac.yaml configuration file: %v", err), nil
+	}
+
+	return nil, &repoconfig
+}
+
+func (g *GoliacLocalImpl) codeowners_regenerate(adminteam string) string {
 	codeowners := "# DO NOT MODIFY THIS FILE MANUALLY\n"
+	codeowners += fmt.Sprintf("* @%s/%s\n", config.Config.GithubAppOrganization, slugify.Make(adminteam))
 
 	teamsnames := make([]string, 0)
 	for _, t := range g.teams {
@@ -147,7 +176,7 @@ func (g *GoliacLocalImpl) codeowners_regenerate() string {
 	sort.Sort(sort.StringSlice(teamsnames))
 
 	for _, t := range teamsnames {
-		codeowners += fmt.Sprintf("/teams/%s @%s/%s-owners\n", t, config.Config.GithubAppOrganization, slugify.Make(t))
+		codeowners += fmt.Sprintf("/teams/%s/* @%s/%s-owners @%s/%s\n", t, config.Config.GithubAppOrganization, slugify.Make(t), config.Config.GithubAppOrganization, slugify.Make(adminteam))
 	}
 
 	return codeowners
@@ -157,7 +186,7 @@ func (g *GoliacLocalImpl) codeowners_regenerate() string {
  * UpdateAndCommitCodeOwners will collects all teams definition to update the .github/CODEOWNERS file
  * cf https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
  */
-func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool, accesstoken string, branch string) error {
+func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(repoconfig *config.RepositoryConfig, dryrun bool, accesstoken string, branch string) error {
 	if g.repo == nil {
 		return fmt.Errorf("git repository not cloned")
 	}
@@ -187,7 +216,7 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool, accesstoken str
 		content = []byte("")
 	}
 
-	newContent := g.codeowners_regenerate()
+	newContent := g.codeowners_regenerate(repoconfig.AdminTeam)
 
 	if string(content) != newContent {
 		logrus.Info(".github/CODEOWNERS needs to be regenerated")
@@ -242,14 +271,14 @@ func (g *GoliacLocalImpl) UpdateAndCommitCodeOwners(dryrun bool, accesstoken str
  * - collect the difference
  * - returns deleted users, and add/updated users
  */
-func syncUsersViaUserPlugin(fs afero.Fs, userplugin usersync.UserSyncPlugin, rootDir string) ([]string, []string, error) {
+func syncUsersViaUserPlugin(repoconfig *config.RepositoryConfig, fs afero.Fs, userplugin usersync.UserSyncPlugin, rootDir string) ([]string, []string, error) {
 	orgUsers, errs, _ := entity.ReadUserDirectory(fs, filepath.Join(rootDir, "users", "org"))
 	if len(errs) > 0 {
 		return nil, nil, fmt.Errorf("cannot load org users (for example: %v)", errs[0])
 	}
 
 	// use usersync to update the users
-	newOrgUsers, err := userplugin.UpdateUsers(filepath.Join(rootDir, "users", "org"))
+	newOrgUsers, err := userplugin.UpdateUsers(repoconfig, filepath.Join(rootDir, "users", "org"))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -289,7 +318,7 @@ func syncUsersViaUserPlugin(fs afero.Fs, userplugin usersync.UserSyncPlugin, roo
 	return deletedusers, updatedusers, nil
 }
 
-func (g *GoliacLocalImpl) SyncUsersAndTeams(userplugin usersync.UserSyncPlugin, dryrun bool) error {
+func (g *GoliacLocalImpl) SyncUsersAndTeams(repoconfig *config.RepositoryConfig, userplugin usersync.UserSyncPlugin, dryrun bool) error {
 	if g.repo == nil {
 		return fmt.Errorf("git repository not cloned")
 	}
@@ -307,7 +336,7 @@ func (g *GoliacLocalImpl) SyncUsersAndTeams(userplugin usersync.UserSyncPlugin, 
 
 	// Parse all the users in the <orgDirectory>/org-users directory
 	fs := afero.NewOsFs()
-	deletedusers, addedusers, err := syncUsersViaUserPlugin(fs, userplugin, rootDir)
+	deletedusers, addedusers, err := syncUsersViaUserPlugin(repoconfig, fs, userplugin, rootDir)
 	if err != nil {
 		return err
 	}
@@ -385,9 +414,6 @@ func (g *GoliacLocalImpl) SyncUsersAndTeams(userplugin usersync.UserSyncPlugin, 
  * Load the goliac organization from Github (after the repository has been cloned)
  * - read the organization files
  * - validate the organization
- * Parameters:
- * - repositoryUrl: the URL of the repository to clone
- * - branch: the branch to checkout
  */
 func (g *GoliacLocalImpl) LoadAndValidate() ([]error, []entity.Warning) {
 	if g.repo == nil {

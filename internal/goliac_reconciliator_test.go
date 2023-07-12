@@ -3,6 +3,7 @@ package internal
 import (
 	"testing"
 
+	"github.com/Alayacare/goliac/internal/config"
 	"github.com/Alayacare/goliac/internal/entity"
 	"github.com/Alayacare/goliac/internal/slugify"
 	"github.com/Alayacare/goliac/internal/usersync"
@@ -18,6 +19,9 @@ type GoliacLocalMock struct {
 
 func (m *GoliacLocalMock) Clone(accesstoken, repositoryUrl, branch string) error {
 	return nil
+}
+func (m *GoliacLocalMock) LoadRepoConfig() (error, *config.RepositoryConfig) {
+	return nil, &config.RepositoryConfig{}
 }
 func (m *GoliacLocalMock) LoadAndValidate() ([]error, []entity.Warning) {
 	return nil, nil
@@ -37,10 +41,10 @@ func (m *GoliacLocalMock) Users() map[string]*entity.User {
 func (m *GoliacLocalMock) ExternalUsers() map[string]*entity.User {
 	return nil
 }
-func (m *GoliacLocalMock) UpdateAndCommitCodeOwners(dryrun bool, accesstoken string, branch string) error {
+func (m *GoliacLocalMock) UpdateAndCommitCodeOwners(repoconfig *config.RepositoryConfig, dryrun bool, accesstoken string, branch string) error {
 	return nil
 }
-func (m *GoliacLocalMock) SyncUsersAndTeams(plugin usersync.UserSyncPlugin, dryrun bool) error {
+func (m *GoliacLocalMock) SyncUsersAndTeams(repoconfig *config.RepositoryConfig, plugin usersync.UserSyncPlugin, dryrun bool) error {
 	return nil
 }
 func (m *GoliacLocalMock) Close() {
@@ -54,7 +58,7 @@ type GoliacRemoteMock struct {
 	teamsrepos map[string]map[string]*GithubTeamRepo // key is the slug team
 }
 
-func (m *GoliacRemoteMock) Load() error {
+func (m *GoliacRemoteMock) Load(repoconfig *config.RepositoryConfig) error {
 	return nil
 }
 func (m *GoliacRemoteMock) Users() map[string]string {

@@ -9,18 +9,14 @@ import (
 	"github.com/spf13/afero"
 )
 
-type UserSyncPluginShellScript struct {
-	shellScript string
-}
+type UserSyncPluginShellScript struct{}
 
 func NewUserSyncPluginShellScript() UserSyncPlugin {
-	return &UserSyncPluginShellScript{
-		shellScript: config.Config.UserSyncPluginShellScriptPath,
-	}
+	return &UserSyncPluginShellScript{}
 }
 
-func (p *UserSyncPluginShellScript) UpdateUsers(orguserdirrectorypath string) (map[string]*entity.User, error) {
-	cmd := exec.Command(p.shellScript, orguserdirrectorypath)
+func (p *UserSyncPluginShellScript) UpdateUsers(repoconfig *config.RepositoryConfig, orguserdirrectorypath string) (map[string]*entity.User, error) {
+	cmd := exec.Command(repoconfig.UserSync.Path, orguserdirrectorypath)
 	_, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, err
