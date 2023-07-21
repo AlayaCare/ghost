@@ -1,8 +1,11 @@
 package internal
 
 import (
+	"fmt"
 	"strings"
 
+	"github.com/Alayacare/goliac/internal/config"
+	"github.com/Alayacare/goliac/internal/slugify"
 	"github.com/sirupsen/logrus"
 )
 
@@ -14,12 +17,14 @@ type GoliacReconciliator interface {
 }
 
 type GoliacReconciliatorImpl struct {
-	executor ReconciliatorExecutor
+	executor   ReconciliatorExecutor
+	repoconfig *config.RepositoryConfig
 }
 
-func NewGoliacReconciliatorImpl(executor ReconciliatorExecutor) GoliacReconciliator {
+func NewGoliacReconciliatorImpl(executor ReconciliatorExecutor, repoconfig *config.RepositoryConfig) GoliacReconciliator {
 	return &GoliacReconciliatorImpl{
-		executor: executor,
+		executor:   executor,
+		repoconfig: repoconfig,
 	}
 }
 
@@ -80,6 +85,47 @@ func (r *GoliacReconciliatorImpl) reconciliateUsers(local GoliacLocal, remote *M
 }
 
 /*
+ * Compare 2 string arrays to see if they contains the same elements
+ * Returns
+ * - true if both are the same
+ * - left only
+ * - rigght only
+ */
+func StringArrayEquivalent(a, b []string) (bool, []string, []string) {
+	leftOnly := []string{}
+	rightOnly := []string{}
+	lefts := make(map[string]bool)
+	for _, m := range a {
+		lefts[m] = true
+	}
+
+	rights := make(map[string]bool)
+	for _, m := range b {
+		rights[m] = true
+	}
+
+	result := true
+
+	if len(lefts) != len(rights) {
+		result = false
+	}
+
+	for r, _ := range rights {
+		if _, ok := lefts[r]; !ok {
+			leftOnly = append(leftOnly, r)
+			result = false
+		}
+	}
+	for l, _ := range lefts {
+		if _, ok := rights[l]; !ok {
+			rightOnly = append(rightOnly, l)
+			result = false
+		}
+	}
+	return result, leftOnly, rightOnly
+}
+
+/*
  * This function sync teams and team's members
  */
 func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote *MutableGoliacRemoteImpl, dryrun bool) error {
@@ -90,98 +136,83 @@ func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote *M
 		rTeams[k] = v
 	}
 
-	for _, lTeam := range local.Teams() {
-		slugTeam, ok := remote.TeamSlugByName()[lTeam.Metadata.Name]
-		if !ok {
-			// deal with non existing team
-			members := make([]string, 0)
-			for _, m := range lTeam.Data.Members {
-				if ghuserid, ok := local.Users()[m]; ok {
-					members = append(members, ghuserid.Data.GithubID)
-				}
-			}
-			for _, m := range lTeam.Data.Owners {
-				if ghuserid, ok := local.Users()[m]; ok {
-					members = append(members, ghuserid.Data.GithubID)
-				}
-			}
-			// CREATE team
-			r.CreateTeam(dryrun, remote, lTeam.Metadata.Name, lTeam.Metadata.Name, members)
-		} else {
-			// deal with existing team
-			rTeam := ghTeams[slugTeam]
+	// prepare the teams we want (regular and "-owners")
+	slugTeams := make(map[string]*GithubTeam)
+	for teamname, teamvalue := range local.Teams() {
+		members := []string{}
+		members = append(members, teamvalue.Data.Members...)
+		members = append(members, teamvalue.Data.Owners...)
 
-			localMembers := make(map[string]bool)
-			for _, m := range lTeam.Data.Members {
-				if ghuserid, ok := local.Users()[m]; ok {
-					localMembers[ghuserid.Data.GithubID] = true
-				}
-			}
-			for _, m := range lTeam.Data.Owners {
-				if ghuserid, ok := local.Users()[m]; ok {
-					localMembers[ghuserid.Data.GithubID] = true
-				}
-			}
-
-			for _, m := range rTeam.Members {
-				if _, ok := localMembers[m]; !ok {
-					// REMOVE team member
-					r.UpdateTeamRemoveMember(dryrun, remote, slugTeam, m)
-				} else {
-					delete(localMembers, m)
-				}
-			}
-			for m := range localMembers {
-				// ADD team member
-				r.UpdateTeamAddMember(dryrun, remote, slugTeam, m, "member")
-			}
-			delete(rTeams, slugTeam)
+		teamslug := slugify.Make(teamname)
+		slugTeams[teamslug] = &GithubTeam{
+			Name:    teamname,
+			Slug:    teamslug,
+			Members: members,
 		}
 
-		slugOwnersTeam, ok := remote.TeamSlugByName()[lTeam.Metadata.Name+"-owners"]
-		if !ok {
-			// deal with non existing team
-			members := make([]string, 0)
-			for _, m := range lTeam.Data.Owners {
-				if ghuserid, ok := local.Users()[m]; ok {
-					members = append(members, ghuserid.Data.GithubID)
-				}
-			}
-			// CREATE team
-			r.CreateTeam(dryrun, remote, lTeam.Metadata.Name+"-owners", lTeam.Metadata.Name+"-owners", members)
-		} else {
-			// deal with existing owners team
-			rOwnersTeam := ghTeams[slugOwnersTeam]
-
-			localOwners := make(map[string]bool)
-			for _, m := range lTeam.Data.Owners {
-				if ghuserid, ok := local.Users()[m]; ok {
-					localOwners[ghuserid.Data.GithubID] = true
-				}
-			}
-
-			for _, m := range rOwnersTeam.Members {
-				if _, ok := localOwners[m]; !ok {
-					// REMOVE owner team member
-					r.UpdateTeamRemoveMember(dryrun, remote, slugOwnersTeam, m)
-				} else {
-					delete(localOwners, m)
-				}
-			}
-			for m := range localOwners {
-				// ADD owner team member
-				r.UpdateTeamAddMember(dryrun, remote, slugOwnersTeam, m, "member")
-			}
-			delete(rTeams, slugOwnersTeam)
+		// owners
+		slugTeams[teamslug+"-owners"] = &GithubTeam{
+			Name:    teamname + "-owners",
+			Slug:    teamslug + "-owners",
+			Members: teamvalue.Data.Owners,
 		}
 	}
 
-	// remaining (GH) teams (aka not found locally)
-	for _, rTeam := range rTeams {
+	// now we compare local (slugTeams) and remote (rTeams)
+
+	compareTeam := func(lTeam *GithubTeam, rTeam *GithubTeam) bool {
+		res, _, _ := StringArrayEquivalent(lTeam.Members, rTeam.Members)
+		return res
+	}
+
+	onAdded := func(key string, lTeam *GithubTeam, rTeam *GithubTeam) {
+		members := make([]string, 0)
+		for _, m := range lTeam.Members {
+			if ghuserid, ok := local.Users()[m]; ok {
+				members = append(members, ghuserid.Data.GithubID)
+			}
+		}
+		// CREATE team
+		r.CreateTeam(dryrun, remote, lTeam.Slug, lTeam.Name, members)
+	}
+
+	onRemoved := func(key string, lTeam *GithubTeam, rTeam *GithubTeam) {
 		// DELETE team
 		r.DeleteTeam(dryrun, remote, rTeam.Slug)
 	}
+
+	onChanged := func(slugTeam string, lTeam *GithubTeam, rTeam *GithubTeam) {
+		localMembers := make(map[string]bool)
+		for _, m := range lTeam.Members {
+			if ghuserid, ok := local.Users()[m]; ok {
+				localMembers[ghuserid.Data.GithubID] = true
+			}
+		}
+
+		for _, m := range rTeam.Members {
+			if _, ok := localMembers[m]; !ok {
+				// REMOVE team member
+				r.UpdateTeamRemoveMember(dryrun, remote, slugTeam, m)
+			} else {
+				delete(localMembers, m)
+			}
+		}
+		for m := range localMembers {
+			// ADD team member
+			r.UpdateTeamAddMember(dryrun, remote, slugTeam, m, "member")
+		}
+	}
+
+	CompareEntities(slugTeams, rTeams, compareTeam, onAdded, onRemoved, onChanged)
+
 	return nil
+}
+
+type GithubRepoComparable struct {
+	IsPublic   bool
+	IsArchived bool
+	Writers    []string
+	Readers    []string
 }
 
 /*
@@ -189,158 +220,124 @@ func (r *GoliacReconciliatorImpl) reconciliateTeams(local GoliacLocal, remote *M
  */
 func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, remote *MutableGoliacRemoteImpl, teamsreponame string, dryrun bool) error {
 	ghRepos := remote.Repositories()
-	rRepos := make(map[string]*GithubRepository)
+	rRepos := make(map[string]*GithubRepoComparable)
 	for k, v := range ghRepos {
-		rRepos[k] = v
+		rRepos[k] = &GithubRepoComparable{
+			IsPublic:   !v.IsPrivate,
+			IsArchived: v.IsArchived,
+			Writers:    []string{},
+			Readers:    []string{},
+		}
 	}
 
 	// on the remote object, I have teams->repos, and I need repos->teams
-	teamsPerRepos := make(map[string]map[string]*GithubTeamRepo)
 	for t, repos := range remote.TeamRepositories() {
 		for r, p := range repos {
-			if _, ok := teamsPerRepos[r]; !ok {
-				teamsPerRepos[r] = make(map[string]*GithubTeamRepo)
+			if rr, ok := rRepos[r]; ok {
+				if p.Permission == "ADMIN" || p.Permission == "WRITE" {
+					rr.Writers = append(rr.Writers, t)
+				} else {
+					rr.Readers = append(rr.Readers, t)
+				}
 			}
-			teamsPerRepos[r][t] = p
 		}
 	}
 
+	lRepos := make(map[string]*GithubRepoComparable)
 	for reponame, lRepo := range local.Repositories() {
-		if rRepo, ok := ghRepos[reponame]; !ok {
-			// deal with non existing repo
-			writers := make([]string, 0)
-			for _, w := range lRepo.Data.Writers {
-				writers = append(writers, remote.TeamSlugByName()[w])
-			}
-			if lRepo.Owner != nil {
-				writers = append(writers, remote.TeamSlugByName()[*lRepo.Owner])
-			}
-			readers := make([]string, 0)
-			for _, r := range lRepo.Data.Readers {
-				readers = append(readers, remote.TeamSlugByName()[r])
-			}
+		writers := make([]string, 0)
+		for _, w := range lRepo.Data.Writers {
+			writers = append(writers, slugify.Make(w))
+		}
+		// add the team owner's name ;-)
+		if lRepo.Owner != nil {
+			writers = append(writers, slugify.Make(*lRepo.Owner))
+		}
+		readers := make([]string, 0)
+		for _, r := range lRepo.Data.Readers {
+			readers = append(readers, slugify.Make(r))
+		}
 
-			// special case for the teams repo
-			if reponame == teamsreponame {
-				for teamname := range local.Teams() {
-					writers = append(writers, remote.TeamSlugByName()[teamname]+"-owners")
-				}
+		// special case for the Goliac "teams" repo
+		if reponame == teamsreponame {
+			for teamname := range local.Teams() {
+				writers = append(writers, slugify.Make(teamname)+"-owners")
 			}
+		}
 
-			// CREATE repository
-			r.CreateRepository(dryrun, remote, reponame, reponame, writers, readers, lRepo.Data.IsPublic)
-		} else {
-			// deal with existing repo
-
-			// reconciliate repositories teams members
-
-			localReadMembers := make(map[string]bool)
-			for _, m := range lRepo.Data.Readers {
-				localReadMembers[m] = true
-			}
-			localWriteMembers := make(map[string]bool)
-			for _, m := range lRepo.Data.Writers {
-				localWriteMembers[m] = true
-			}
-			if lRepo.Owner != nil {
-				localWriteMembers[*lRepo.Owner] = true
-			}
-
-			// special case for the teams repo
-			if reponame == teamsreponame {
-				for teamname := range local.Teams() {
-					localWriteMembers[teamname+"-owners"] = true
-				}
-			}
-
-			// let's get remote teams per type (read/write)
-			remoteReadMembers := make(map[string]string)
-			remoteWriteMembers := make(map[string]string)
-			for slugteam, permissions := range teamsPerRepos[reponame] {
-				team := remote.Teams()[slugteam]
-				if permissions.Permission == "pull" {
-					remoteReadMembers[slugteam] = team.Name
-				} else {
-					remoteWriteMembers[slugteam] = team.Name
-				}
-			}
-
-			// let's check if a reader was put in a writer
-			for teamSlug, teamName := range remoteReadMembers {
-				if _, ok := localReadMembers[teamName]; !ok {
-					if _, ok := localWriteMembers[teamName]; ok {
-						r.UpdateRepositoryUpdateTeamAccess(dryrun, remote, reponame, teamSlug, "push")
-						remoteWriteMembers[teamSlug] = teamName
-						delete(remoteReadMembers, teamSlug)
-					}
-				}
-			}
-			for teamSlug, teamName := range remoteWriteMembers {
-				if _, ok := localWriteMembers[teamName]; !ok {
-					if _, ok := localReadMembers[teamName]; ok { // not an update
-						r.UpdateRepositoryUpdateTeamAccess(dryrun, remote, reponame, teamSlug, "pull")
-						remoteReadMembers[teamSlug] = teamName
-						delete(remoteWriteMembers, teamSlug)
-					}
-				}
-			}
-
-			// let's deal with readers
-			for teamSlug, teamName := range remoteReadMembers {
-				if _, ok := localReadMembers[teamName]; !ok {
-
-					// REMOVE team member
-					r.UpdateRepositoryRemoveTeamAccess(dryrun, remote, reponame, teamSlug)
-				} else {
-					// we will keep in localReadMembers members not found (and to be deleted)
-					delete(localReadMembers, teamName)
-				}
-			}
-			for m := range localReadMembers {
-				// ADD team member
-				if teamSlug, ok := remote.TeamSlugByName()[m]; ok {
-					r.UpdateRepositoryAddTeamAccess(dryrun, remote, reponame, teamSlug, "pull")
-				}
-			}
-
-			// let's deal with writers
-			for teamSlug, teamName := range remoteWriteMembers {
-				if _, ok := localWriteMembers[teamName]; !ok {
-					// REMOVE team member
-					r.UpdateRepositoryRemoveTeamAccess(dryrun, remote, reponame, teamSlug)
-				} else {
-					// we will keep in localWriteMembers members not found (and to be deleted)
-					delete(localWriteMembers, teamName)
-				}
-			}
-			for m := range localWriteMembers {
-				if teamSlug, ok := remote.TeamSlugByName()[m]; ok {
-					// ADD team member
-					r.UpdateRepositoryAddTeamAccess(dryrun, remote, reponame, teamSlug, "push")
-				}
-			}
-
-			// reconciliate repositories public/private
-			if lRepo.Data.IsPublic == rRepo.IsPrivate {
-				// UPDATE private repository
-				r.UpdateRepositoryUpdatePrivate(dryrun, remote, reponame, !lRepo.Data.IsPublic)
-			}
-
-			// reconciliate repositories archived
-			if lRepo.Data.IsArchived != rRepo.IsArchived {
-				// UPDATE archived repository
-				r.UpdateRepositoryUpdateArchived(dryrun, remote, reponame, lRepo.Data.IsArchived)
-			}
-
-			delete(rRepos, reponame)
+		lRepos[reponame] = &GithubRepoComparable{
+			IsPublic:   lRepo.Data.IsPublic,
+			IsArchived: lRepo.Data.IsArchived,
+			Readers:    readers,
+			Writers:    writers,
 		}
 	}
 
-	// remaining (GH) teams (aka not found locally)
-	for reponame := range rRepos {
-		// DELETE repository
+	// now we compare local (slugTeams) and remote (rTeams)
+
+	compareRepos := func(lRepo *GithubRepoComparable, rRepo *GithubRepoComparable) bool {
+		if lRepo.IsArchived != rRepo.IsArchived {
+			return false
+		}
+		if lRepo.IsPublic != rRepo.IsPublic {
+			return false
+		}
+
+		if res, _, _ := StringArrayEquivalent(lRepo.Readers, rRepo.Readers); res == false {
+			return false
+		}
+
+		if res, _, _ := StringArrayEquivalent(lRepo.Writers, rRepo.Writers); res == false {
+			return false
+		}
+		return true
+	}
+
+	onAdded := func(reponame string, lRepo *GithubRepoComparable, rRepo *GithubRepoComparable) {
+		// CREATE repository
+		r.CreateRepository(dryrun, remote, reponame, reponame, lRepo.Writers, lRepo.Readers, lRepo.IsPublic)
+	}
+
+	onRemoved := func(reponame string, lRepo *GithubRepoComparable, rRepo *GithubRepoComparable) {
 		r.DeleteRepository(dryrun, remote, reponame)
 	}
+
+	onChanged := func(reponame string, lRepo *GithubRepoComparable, rRepo *GithubRepoComparable) {
+		// reconciliate repositories public/private
+		if lRepo.IsPublic != rRepo.IsPublic {
+			// UPDATE private repository
+			r.UpdateRepositoryUpdatePrivate(dryrun, remote, reponame, !lRepo.IsPublic)
+		}
+
+		// reconciliate repositories archived
+		if lRepo.IsArchived != rRepo.IsArchived {
+			// UPDATE archived repository
+			r.UpdateRepositoryUpdateArchived(dryrun, remote, reponame, lRepo.IsArchived)
+		}
+
+		fmt.Println(lRepo.Readers, rRepo.Readers)
+		if res, readToRemove, readToAdd := StringArrayEquivalent(lRepo.Readers, rRepo.Readers); res == false {
+			for _, teamSlug := range readToAdd {
+				r.UpdateRepositoryAddTeamAccess(dryrun, remote, reponame, teamSlug, "pull")
+			}
+			for _, teamSlug := range readToRemove {
+				r.UpdateRepositoryRemoveTeamAccess(dryrun, remote, reponame, teamSlug)
+			}
+		}
+
+		if res, writeToRemove, writeToAdd := StringArrayEquivalent(lRepo.Writers, rRepo.Writers); res == false {
+			for _, teamSlug := range writeToAdd {
+				r.UpdateRepositoryAddTeamAccess(dryrun, remote, reponame, teamSlug, "push")
+			}
+			for _, teamSlug := range writeToRemove {
+				r.UpdateRepositoryRemoveTeamAccess(dryrun, remote, reponame, teamSlug)
+			}
+		}
+
+	}
+
+	CompareEntities(lRepos, rRepos, compareRepos, onAdded, onRemoved, onChanged)
+
 	return nil
 }
 
@@ -356,7 +353,9 @@ func (r *GoliacReconciliatorImpl) RemoveUserFromOrg(dryrun bool, remote *Mutable
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "remove_user_from_org"}).Infof("ghusername: %s", ghuserid)
 	remote.RemoveUserFromOrg(ghuserid)
 	if !dryrun && r.executor != nil {
-		r.executor.RemoveUserFromOrg(ghuserid)
+		if r.repoconfig.DestructiveOperations.AllowDestructiveUsers {
+			r.executor.RemoveUserFromOrg(ghuserid)
+		}
 	}
 }
 
@@ -385,7 +384,9 @@ func (r *GoliacReconciliatorImpl) DeleteTeam(dryrun bool, remote *MutableGoliacR
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "delete_team"}).Infof("teamslug: %s", teamslug)
 	remote.DeleteTeam(teamslug)
 	if !dryrun && r.executor != nil {
-		r.executor.DeleteTeam(teamslug)
+		if r.repoconfig.DestructiveOperations.AllowDestructiveTeams {
+			r.executor.DeleteTeam(teamslug)
+		}
 	}
 }
 func (r *GoliacReconciliatorImpl) CreateRepository(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, descrition string, writers []string, readers []string, public bool) {
@@ -422,7 +423,9 @@ func (r *GoliacReconciliatorImpl) DeleteRepository(dryrun bool, remote *MutableG
 	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "delete_repository"}).Infof("repositoryname: %s", reponame)
 	remote.DeleteRepository(reponame)
 	if !dryrun && r.executor != nil {
-		r.executor.DeleteRepository(reponame)
+		if r.repoconfig.DestructiveOperations.AllowDestructiveRepositories {
+			r.executor.DeleteRepository(reponame)
+		}
 	}
 }
 func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdatePrivate(dryrun bool, remote *MutableGoliacRemoteImpl, reponame string, private bool) {

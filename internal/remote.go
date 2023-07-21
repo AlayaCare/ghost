@@ -25,6 +25,7 @@ type GoliacRemote interface {
 	TeamSlugByName() map[string]string
 	Teams() map[string]*GithubTeam                           // the key is the team slug
 	Repositories() map[string]*GithubRepository              // the key is the repository name
+	RepositoriesById() map[string]*GithubRepository          // the key is the repository id
 	TeamRepositories() map[string]map[string]*GithubTeamRepo // key is team slug, second key is repo name
 }
 
@@ -35,6 +36,7 @@ type GoliacRemoteExecutor interface {
 
 type GithubRepository struct {
 	Name       string
+	Id         string
 	IsArchived bool
 	IsPrivate  bool
 }
@@ -51,22 +53,24 @@ type GithubTeamRepo struct {
 }
 
 type GoliacRemoteImpl struct {
-	client         github.GitHubClient
-	users          map[string]string
-	repositories   map[string]*GithubRepository
-	teams          map[string]*GithubTeam
-	teamRepos      map[string]map[string]*GithubTeamRepo
-	teamSlugByName map[string]string
+	client           github.GitHubClient
+	users            map[string]string
+	repositories     map[string]*GithubRepository
+	repositoriesById map[string]*GithubRepository
+	teams            map[string]*GithubTeam
+	teamRepos        map[string]map[string]*GithubTeamRepo
+	teamSlugByName   map[string]string
 }
 
 func NewGoliacRemoteImpl(client github.GitHubClient) *GoliacRemoteImpl {
 	return &GoliacRemoteImpl{
-		client:         client,
-		users:          make(map[string]string),
-		repositories:   make(map[string]*GithubRepository),
-		teams:          make(map[string]*GithubTeam),
-		teamRepos:      make(map[string]map[string]*GithubTeamRepo),
-		teamSlugByName: make(map[string]string),
+		client:           client,
+		users:            make(map[string]string),
+		repositories:     make(map[string]*GithubRepository),
+		repositoriesById: make(map[string]*GithubRepository),
+		teams:            make(map[string]*GithubTeam),
+		teamRepos:        make(map[string]map[string]*GithubTeamRepo),
+		teamSlugByName:   make(map[string]string),
 	}
 }
 
@@ -83,6 +87,9 @@ func (g *GoliacRemoteImpl) Teams() map[string]*GithubTeam {
 }
 func (g *GoliacRemoteImpl) Repositories() map[string]*GithubRepository {
 	return g.repositories
+}
+func (g *GoliacRemoteImpl) RepositoriesById() map[string]*GithubRepository {
+	return g.repositoriesById
 }
 func (g *GoliacRemoteImpl) TeamRepositories() map[string]map[string]*GithubTeamRepo {
 	return g.teamRepos
@@ -177,6 +184,7 @@ query listAllReposInOrg($orgLogin: String!, $endCursor: String) {
       repositories(first: 100, after: $endCursor) {
         nodes {
           name
+		  id
           isArchived
           isPrivate
         }
@@ -196,6 +204,7 @@ type GraplQLRepositories struct {
 			Repositories struct {
 				Nodes []struct {
 					Name       string
+					Id         string
 					IsArchived bool
 					IsPrivate  bool
 				} `json:"nodes"`
@@ -221,6 +230,7 @@ type GraplQLRepositories struct {
 
 func (g *GoliacRemoteImpl) loadRepositories() error {
 	g.repositories = make(map[string]*GithubRepository)
+	g.repositoriesById = make(map[string]*GithubRepository)
 
 	variables := make(map[string]interface{})
 	variables["orgLogin"] = config.Config.GithubAppOrganization
@@ -242,11 +252,14 @@ func (g *GoliacRemoteImpl) loadRepositories() error {
 		}
 
 		for _, c := range gResult.Data.Organization.Repositories.Nodes {
-			g.repositories[c.Name] = &GithubRepository{
+			repo := &GithubRepository{
 				Name:       c.Name,
+				Id:         c.Id,
 				IsArchived: c.IsArchived,
 				IsPrivate:  c.IsPrivate,
 			}
+			g.repositories[c.Name] = repo
+			g.repositoriesById[c.Id] = repo
 		}
 
 		hasNextPage = gResult.Data.Organization.Repositories.PageInfo.HasNextPage
@@ -641,6 +654,58 @@ func (g *GoliacRemoteImpl) loadTeams() error {
 	return nil
 }
 
+const listRulesets = `
+query listRulesets ($orgLogin: String!) { 
+	organization(login: $orgLogin) {
+	  rulesets(first: 100) { 
+		nodes {
+		  bypassActors(first:100) {
+			app:nodes {
+			  actor {
+				... on App {
+					name
+				}
+			  }
+			  bypassMode
+			}
+			team:nodes {
+			  actor {
+				... on Team {
+					name
+				}
+			  }
+			  bypassMode
+			}
+		  }
+		  conditions {
+			refName {
+			  include
+			  exclude
+			}
+			repositoryName {
+			  exclude
+			  include
+			}
+			repositoryId {
+				repositoryIds
+			}
+		  }
+		  rules(first:100) {
+			nodes {
+				parameters {
+					... on PullRequestParameters {
+						requiredApprovingReviewCount
+					}
+				}
+				type
+			}
+		  }
+		}
+	  }
+	}
+  }
+`
+
 func (g *GoliacRemoteImpl) AddUserToOrg(ghuserid string) {
 	// add member
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#create-a-team
@@ -732,26 +797,26 @@ func (g *GoliacRemoteImpl) UpdateTeamRemoveMember(teamslug string, username stri
 }
 
 func (g *GoliacRemoteImpl) DeleteTeam(teamslug string) {
-	// NOOP: we dont want to delete teams
+	// delete team
+	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#delete-a-team
+	_, err := g.client.CallRestAPI(
+		fmt.Sprintf("/orgs/%s/teams/%s", config.Config.GithubAppOrganization, teamslug),
+		"DELETE",
+		nil,
+	)
+	if err != nil {
+		logrus.Errorf("failed to delete a team: %v", err)
+	}
+}
 
-	/*
-		// delete team
-		// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#delete-a-team
-		_, err := g.client.CallRestAPI(
-			fmt.Sprintf("/orgs/%s/teams/%s", config.Config.GithubAppOrganization, teamslug),
-			"DELETE",
-			nil,
-		)
-		if err != nil {
-			logrus.Errorf("failed to delete a team: %v",err)
-		}
-	*/
+type CreateRepositoryResponse struct {
+	NodeId string `json:"node_id"`
 }
 
 func (g *GoliacRemoteImpl) CreateRepository(reponame string, description string, writers []string, readers []string, public bool) {
-	// create team
-	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#create-a-team
-	_, err := g.client.CallRestAPI(
+	// create repository
+	// https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#create-an-organization-repository
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/repos", config.Config.GithubAppOrganization),
 		"POST",
 		map[string]interface{}{"name": reponame, "description": description, "private": !public},
@@ -760,6 +825,24 @@ func (g *GoliacRemoteImpl) CreateRepository(reponame string, description string,
 		logrus.Errorf("failed to create repository: %v", err)
 		return
 	}
+
+	// get the repo id
+	var resp CreateRepositoryResponse
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		logrus.Errorf("failed to read the create repository action response: %v", err)
+		return
+	}
+
+	// update the repositories list
+	newRepo := &GithubRepository{
+		Name:       reponame,
+		Id:         resp.NodeId,
+		IsArchived: false,
+		IsPrivate:  !public,
+	}
+	g.repositories[reponame] = newRepo
+	g.repositoriesById[resp.NodeId] = newRepo
 
 	// add members
 	for _, reader := range readers {
@@ -850,20 +933,23 @@ func (g *GoliacRemoteImpl) UpdateRepositoryUpdateArchived(reponame string, archi
 }
 
 func (g *GoliacRemoteImpl) DeleteRepository(reponame string) {
-	// NOOP: we dont want to delete repositories
+	// delete repo
+	// https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#delete-a-repository
+	_, err := g.client.CallRestAPI(
+		fmt.Sprintf("/orgs/%s/%s", config.Config.GithubAppOrganization, reponame),
+		"DELETE",
+		nil,
+	)
+	if err != nil {
+		logrus.Errorf("failed to delete repository: %v", err)
+	}
 
-	/*
-		// delete repo
-		// https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#delete-a-repository
-		_, err := g.client.CallRestAPI(
-			fmt.Sprintf("/orgs/%s/%s", config.Config.GithubAppOrganization, reponame),
-			"DELETE",
-			nil,
-		)
-		if err != nil {
-			logrus.Errorf("failed to delete repository: %v",err)
-		}
-	*/
+	// update the repositories list
+	if r, ok := g.repositories[reponame]; ok {
+		delete(g.repositoriesById, r.Id)
+		delete(g.repositories, reponame)
+	}
+
 }
 func (g *GoliacRemoteImpl) Begin() {
 }

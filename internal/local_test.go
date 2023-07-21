@@ -141,8 +141,6 @@ func TestRepository(t *testing.T) {
 
 		errs, warns := g.LoadAndValidate()
 
-		fmt.Println(errs)
-		fmt.Println(warns)
 		assert.Equal(t, 0, len(errs))
 		assert.Equal(t, 0, len(warns))
 	})

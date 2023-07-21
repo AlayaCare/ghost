@@ -78,6 +78,9 @@ func (m *GoliacRemoteMock) Teams() map[string]*GithubTeam {
 func (m *GoliacRemoteMock) Repositories() map[string]*GithubRepository {
 	return m.repos
 }
+func (m *GoliacRemoteMock) RepositoriesById() map[string]*GithubRepository {
+	return make(map[string]*GithubRepository)
+}
 func (m *GoliacRemoteMock) TeamRepositories() map[string]map[string]*GithubTeamRepo {
 	return m.teamsrepos
 }
@@ -168,7 +171,7 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: new team", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -206,7 +209,7 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: new team with non english slug", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -238,13 +241,13 @@ func TestReconciliation(t *testing.T) {
 		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 2 members created
-		assert.Equal(t, 2, len(recorder.TeamsCreated["nouveauté"]))
-		assert.Equal(t, 1, len(recorder.TeamsCreated["nouveauté-owners"]))
+		assert.Equal(t, 2, len(recorder.TeamsCreated["nouveaut"]))
+		assert.Equal(t, 1, len(recorder.TeamsCreated["nouveaut-owners"]))
 	})
 
 	t.Run("happy path: existing team with new members", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -300,7 +303,7 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: existing team with non english slug with new members", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -356,9 +359,39 @@ func TestReconciliation(t *testing.T) {
 		assert.Equal(t, 1, len(recorder.TeamMemberAdded["exist-ing"]))
 	})
 
+	t.Run("happy path: removed team without destructive operation", func(t *testing.T) {
+		recorder := NewReconciliatorListenerRecorder()
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
+			teams: make(map[string]*entity.Team),
+			repos: make(map[string]*entity.Repository),
+		}
+
+		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
+			teams:      make(map[string]*GithubTeam),
+			repos:      make(map[string]*GithubRepository),
+			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
+		}
+		removing := &GithubTeam{
+			Name:    "removing",
+			Slug:    "removing",
+			Members: []string{"existing_owner", "existing_owner"},
+		}
+		remote.teams["removing"] = removing
+
+		r.Reconciliate(&local, &remote, "teams", false)
+
+		// 1 team deleted
+		assert.Equal(t, 0, len(recorder.TeamDeleted))
+	})
+
 	t.Run("happy path: removed team", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		repoconfig := &config.RepositoryConfig{}
+		repoconfig.DestructiveOperations.AllowDestructiveTeams = true
+		r := NewGoliacReconciliatorImpl(recorder, repoconfig)
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
@@ -386,7 +419,7 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: new repo without owner", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -414,7 +447,7 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: new repo with owner", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -456,7 +489,7 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: existing repo with new owner (from read to write)", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -505,14 +538,14 @@ func TestReconciliation(t *testing.T) {
 		// 1 team updated
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
 		assert.Equal(t, 0, len(recorder.RepositoriesDeleted))
-		assert.Equal(t, 0, len(recorder.RepositoryTeamRemoved))
-		assert.Equal(t, 0, len(recorder.RepositoryTeamAdded))
-		assert.Equal(t, 1, len(recorder.RepositoryTeamUpdated))
+		assert.Equal(t, 1, len(recorder.RepositoryTeamRemoved))
+		assert.Equal(t, 1, len(recorder.RepositoryTeamAdded))
+		assert.Equal(t, 0, len(recorder.RepositoryTeamUpdated))
 	})
 
 	t.Run("happy path: add a team to an existing repo", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -565,7 +598,7 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "push",
+			Permission: "ADMIN",
 		}
 
 		r.Reconciliate(&local, &remote, "teams", false)
@@ -580,7 +613,7 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: remove a team from an existing repo", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -633,12 +666,12 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "push",
+			Permission: "WRITE",
 		}
 		remote.teamsrepos["reader"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["reader"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "pull",
+			Permission: "WRITE",
 		}
 
 		r.Reconciliate(&local, &remote, "teams", false)
@@ -653,7 +686,7 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: remove a team member", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -694,7 +727,7 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "push",
+			Permission: "WRITE",
 		}
 
 		r.Reconciliate(&local, &remote, "teams", false)
@@ -710,7 +743,7 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: add a team AND add it to an existing repo", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -757,7 +790,7 @@ func TestReconciliation(t *testing.T) {
 		remote.teamsrepos["existing"] = make(map[string]*GithubTeamRepo)
 		remote.teamsrepos["existing"]["myrepo"] = &GithubTeamRepo{
 			Name:       "myrepo",
-			Permission: "push",
+			Permission: "WRITE",
 		}
 
 		r.Reconciliate(&local, &remote, "teams", false)
@@ -769,9 +802,38 @@ func TestReconciliation(t *testing.T) {
 		assert.Equal(t, 1, len(recorder.RepositoryTeamAdded))
 	})
 
+	t.Run("happy path: removed repo without destructive operation", func(t *testing.T) {
+		recorder := NewReconciliatorListenerRecorder()
+		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		local := GoliacLocalMock{
+			users: make(map[string]*entity.User),
+			teams: make(map[string]*entity.Team),
+			repos: make(map[string]*entity.Repository),
+		}
+
+		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
+			teams:      make(map[string]*GithubTeam),
+			repos:      make(map[string]*GithubRepository),
+			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
+		}
+		removing := &GithubRepository{
+			Name: "removing",
+		}
+		remote.repos["removing"] = removing
+
+		r.Reconciliate(&local, &remote, "teams", false)
+
+		// 1 repo deleted
+		assert.Equal(t, 0, len(recorder.RepositoriesDeleted))
+	})
+
 	t.Run("happy path: removed repo", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder)
+		repoconfig := &config.RepositoryConfig{}
+		repoconfig.DestructiveOperations.AllowDestructiveRepositories = true
+		r := NewGoliacReconciliatorImpl(recorder, repoconfig)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -795,5 +857,33 @@ func TestReconciliation(t *testing.T) {
 		// 1 repo deleted
 		assert.Equal(t, 1, len(recorder.RepositoriesDeleted))
 	})
+}
 
+func TestStringArrayEquivalent(t *testing.T) {
+	t.Run("StringArrayEquivalent: no change", func(t *testing.T) {
+		res, added, removed := StringArrayEquivalent([]string{"aa", "bb"}, []string{"bb", "aa"})
+
+		assert.Equal(t, true, res)
+		assert.Equal(t, 0, len(added))
+		assert.Equal(t, 0, len(removed))
+
+	})
+
+	t.Run("StringArrayEquivalent: removed", func(t *testing.T) {
+		res, added, removed := StringArrayEquivalent([]string{"aa", "cc", "bb"}, []string{"bb", "aa"})
+
+		assert.Equal(t, false, res)
+		assert.Equal(t, 0, len(added))
+		assert.Equal(t, 1, len(removed))
+
+	})
+
+	t.Run("StringArrayEquivalent: added", func(t *testing.T) {
+		res, added, removed := StringArrayEquivalent([]string{"aa", "bb"}, []string{"bb", "cc", "aa"})
+
+		assert.Equal(t, false, res)
+		assert.Equal(t, 1, len(added))
+		assert.Equal(t, 0, len(removed))
+
+	})
 }

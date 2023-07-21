@@ -105,7 +105,7 @@ func (g *GoliacImpl) ApplyToGithub(dryrun bool, teamreponame string, branch stri
 	}
 
 	ga := NewGithubBatchExecutor(g.remote, g.repoconfig.MaxChangesets)
-	reconciliator := NewGoliacReconciliatorImpl(ga)
+	reconciliator := NewGoliacReconciliatorImpl(ga, g.repoconfig)
 
 	err = reconciliator.Reconciliate(g.local, g.remote, teamreponame, dryrun)
 	if err != nil {

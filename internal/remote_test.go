@@ -171,6 +171,9 @@ func (m *MockGithubClient) reposEdges(first, after string, args ast.ArgumentList
 			if c, _ := hasChild("name", nodeField.SelectionSet); c {
 				node["name"] = fmt.Sprintf("repo_%d", index)
 			}
+			if c, _ := hasChild("id", nodeField.SelectionSet); c {
+				node["id"] = fmt.Sprintf("id_%d", index)
+			}
 			block["node"] = node
 		}
 		index++
@@ -350,6 +353,10 @@ func (m *MockGithubClient) organization(args ast.ArgumentList, children ast.Sele
 		data["team"] = m.team(s.Arguments, s.SelectionSet, variables)
 	}
 	return data
+}
+
+func (m *MockGithubClient) GetAppSlug() string {
+	return "mock-github-client"
 }
 
 func (m *MockGithubClient) QueryGraphQLAPI(query string, variables map[string]interface{}) ([]byte, error) {

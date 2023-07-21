@@ -20,12 +20,14 @@ type GitHubClient interface {
 	QueryGraphQLAPI(query string, variables map[string]interface{}) ([]byte, error)
 	CallRestAPI(endpoint, method string, body map[string]interface{}) ([]byte, error)
 	GetAccessToken() (string, error)
+	GetAppSlug() string
 }
 
 type GitHubClientImpl struct {
 	gitHubServer    string
-	appID           string
+	appID           int
 	installationID  int
+	appSlug         string
 	privateKey      []byte
 	accessToken     string
 	httpClient      *http.Client
@@ -79,7 +81,7 @@ func (t *AuthorizedTransport) RoundTrip(req *http.Request) (*http.Response, erro
  * 	"private-key.pem",
  * )
  */
-func NewGitHubClientImpl(githubServer, organizationName, appID, privateKeyFile string) (GitHubClient, error) {
+func NewGitHubClientImpl(githubServer, organizationName string, appID int, privateKeyFile string) (GitHubClient, error) {
 	privateKey, err := ioutil.ReadFile(privateKeyFile)
 	if err != nil {
 		return nil, err
@@ -105,8 +107,9 @@ func NewGitHubClientImpl(githubServer, organizationName, appID, privateKeyFile s
 
 	// find the installation ID for the given organization
 	for _, installation := range installations {
-		if installation.Account.Login == organizationName {
+		if installation.Account.Login == organizationName && installation.AppId == appID {
 			client.installationID = installation.ID
+			client.appSlug = installation.AppSlug
 			break
 		}
 	}
@@ -371,4 +374,8 @@ func (client *GitHubClientImpl) GetAccessToken() (string, error) {
 	client.tokenExpiration = expiration
 
 	return accessToken, nil
+}
+
+func (client *GitHubClientImpl) GetAppSlug() string {
+	return client.appSlug
 }
