@@ -16,6 +16,9 @@ type ReconciliatorExecutor interface {
 	UpdateRepositoryAddTeamAccess(reponame string, teamslug string, permission string)    // permission can be "pull", "push", or "admin" which correspond to read, write, and admin access.
 	UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) // permission can be "pull", "push", or "admin" which correspond to read, write, and admin access.
 	UpdateRepositoryRemoveTeamAccess(reponame string, teamslug string)
+	AddRuleset(ruleset *GithubRuleSet)
+	UpdateRuleset(ruleset *GithubRuleSet)
+	DeleteRuleset(rulesetid int)
 	//	UpdateRepositoryAddCollaboratorAccess(reponame string, username string, permission string)    // permission can be "pull", "push", or "admin" which correspond to read, write, and admin access.
 	//	UpdateRepositoryUpdateCollaboratorAccess(reponame string, username string, permission string) // permission can be "pull", "push", or "admin" which correspond to read, write, and admin access.
 	//	UpdateRepositoryRemoveCollaboratorAccess(reponame string, username string)

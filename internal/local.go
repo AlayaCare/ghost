@@ -50,6 +50,7 @@ type GoliacLocal interface {
 	Repositories() map[string]*entity.Repository // reponame, repo definition
 	Users() map[string]*entity.User              // github username, user definition
 	ExternalUsers() map[string]*entity.User
+	RuleSets() map[string]*entity.RuleSet
 }
 
 type GoliacLocalImpl struct {
@@ -57,6 +58,7 @@ type GoliacLocalImpl struct {
 	repositories  map[string]*entity.Repository
 	users         map[string]*entity.User
 	externalUsers map[string]*entity.User
+	rulesets      map[string]*entity.RuleSet
 	repo          *git.Repository
 }
 
@@ -66,6 +68,7 @@ func NewGoliacLocalImpl() GoliacLocal {
 		repositories:  map[string]*entity.Repository{},
 		users:         map[string]*entity.User{},
 		externalUsers: map[string]*entity.User{},
+		rulesets:      map[string]*entity.RuleSet{},
 		repo:          nil,
 	}
 }
@@ -84,6 +87,10 @@ func (g *GoliacLocalImpl) Users() map[string]*entity.User {
 
 func (g *GoliacLocalImpl) ExternalUsers() map[string]*entity.User {
 	return g.externalUsers
+}
+
+func (g *GoliacLocalImpl) RuleSets() map[string]*entity.RuleSet {
+	return g.rulesets
 }
 
 func (g *GoliacLocalImpl) Clone(accesstoken, repositoryUrl, branch string) error {
@@ -463,6 +470,11 @@ func (g *GoliacLocalImpl) loadUsers(fs afero.Fs, orgDirectory string) ([]error, 
 	warnings = append(warnings, warns...)
 	g.externalUsers = externalUsers
 
+	rulesets, errs, warns := entity.ReadRuleSetDirectory(fs, filepath.Join(orgDirectory, "rulesets"))
+	errors = append(errors, errs...)
+	warnings = append(warnings, warns...)
+	g.rulesets = rulesets
+
 	return errors, warnings
 }
 
@@ -489,6 +501,11 @@ func (g *GoliacLocalImpl) LoadAndValidateLocal(fs afero.Fs, orgDirectory string)
 	errors = append(errors, errs...)
 	warnings = append(warnings, warns...)
 	g.repositories = repos
+
+	rulesets, errs, warns := entity.ReadRuleSetDirectory(fs, filepath.Join(orgDirectory, "rulesets"))
+	errors = append(errors, errs...)
+	warnings = append(warnings, warns...)
+	g.rulesets = rulesets
 
 	logrus.Infof("Nb local users: %d", len(g.users))
 	logrus.Infof("Nb local external users: %d", len(g.externalUsers))

@@ -10,11 +10,14 @@ import (
  * (or running in drymode)
  */
 type MutableGoliacRemoteImpl struct {
-	users          map[string]string
-	repositories   map[string]*GithubRepository
-	teams          map[string]*GithubTeam
-	teamRepos      map[string]map[string]*GithubTeamRepo
-	teamSlugByName map[string]string
+	users               map[string]string
+	repositories        map[string]*GithubRepository
+	repositoriesByRefId map[string]*GithubRepository
+	teams               map[string]*GithubTeam
+	teamRepos           map[string]map[string]*GithubTeamRepo
+	teamSlugByName      map[string]string
+	rulesets            map[string]*GithubRuleSet
+	appIds              map[string]int
 }
 
 func NewMutableGoliacRemoteImpl(remote GoliacRemote) *MutableGoliacRemoteImpl {
@@ -47,12 +50,31 @@ func NewMutableGoliacRemoteImpl(remote GoliacRemote) *MutableGoliacRemoteImpl {
 		}
 		rTeamRepositories[k1] = repos
 	}
+
+	rulesets := make(map[string]*GithubRuleSet)
+	for k, v := range remote.RuleSets() {
+		rulesets[k] = v
+	}
+
+	appids := make(map[string]int)
+	for k, v := range remote.AppIds() {
+		appids[k] = v
+	}
+
+	repositoriesByRefId := make(map[string]*GithubRepository)
+	for k, v := range remote.RepositoriesByRefId() {
+		repositoriesByRefId[k] = v
+	}
+
 	return &MutableGoliacRemoteImpl{
-		users:          rUsers,
-		repositories:   rRepositories,
-		teams:          rTeams,
-		teamRepos:      rTeamRepositories,
-		teamSlugByName: rTeamSlugByName,
+		users:               rUsers,
+		repositories:        rRepositories,
+		teams:               rTeams,
+		teamRepos:           rTeamRepositories,
+		teamSlugByName:      rTeamSlugByName,
+		rulesets:            rulesets,
+		appIds:              appids,
+		repositoriesByRefId: repositoriesByRefId,
 	}
 }
 
@@ -72,6 +94,15 @@ func (m *MutableGoliacRemoteImpl) Repositories() map[string]*GithubRepository {
 }
 func (m *MutableGoliacRemoteImpl) TeamRepositories() map[string]map[string]*GithubTeamRepo {
 	return m.teamRepos
+}
+func (m *MutableGoliacRemoteImpl) RuleSets() map[string]*GithubRuleSet {
+	return m.rulesets
+}
+func (g *MutableGoliacRemoteImpl) AppIds() map[string]int {
+	return g.appIds
+}
+func (g *MutableGoliacRemoteImpl) RepositoryByRefId() map[string]*GithubRepository {
+	return g.repositoriesByRefId
 }
 
 // LISTENER
@@ -158,4 +189,14 @@ func (m *MutableGoliacRemoteImpl) UpdateRepositoryUpdateArchived(reponame string
 	if r, ok := m.repositories[reponame]; ok {
 		r.IsArchived = archived
 	}
+}
+
+func (m *MutableGoliacRemoteImpl) AddRuleset(ruleset *GithubRuleSet) {
+
+}
+func (m *MutableGoliacRemoteImpl) UpdateRuleset(ruleset *GithubRuleSet) {
+
+}
+func (m *MutableGoliacRemoteImpl) DeleteRuleset(rulesetid int) {
+
 }

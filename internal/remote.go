@@ -25,8 +25,10 @@ type GoliacRemote interface {
 	TeamSlugByName() map[string]string
 	Teams() map[string]*GithubTeam                           // the key is the team slug
 	Repositories() map[string]*GithubRepository              // the key is the repository name
-	RepositoriesById() map[string]*GithubRepository          // the key is the repository id
+	RepositoriesByRefId() map[string]*GithubRepository       // the key is the repository id
 	TeamRepositories() map[string]map[string]*GithubTeamRepo // key is team slug, second key is repo name
+	RuleSets() map[string]*GithubRuleSet
+	AppIds() map[string]int
 }
 
 type GoliacRemoteExecutor interface {
@@ -36,7 +38,8 @@ type GoliacRemoteExecutor interface {
 
 type GithubRepository struct {
 	Name       string
-	Id         string
+	Id         int
+	RefId      string
 	IsArchived bool
 	IsPrivate  bool
 }
@@ -53,25 +56,37 @@ type GithubTeamRepo struct {
 }
 
 type GoliacRemoteImpl struct {
-	client           github.GitHubClient
-	users            map[string]string
-	repositories     map[string]*GithubRepository
-	repositoriesById map[string]*GithubRepository
-	teams            map[string]*GithubTeam
-	teamRepos        map[string]map[string]*GithubTeamRepo
-	teamSlugByName   map[string]string
+	client              github.GitHubClient
+	users               map[string]string
+	repositories        map[string]*GithubRepository
+	repositoriesByRefId map[string]*GithubRepository
+	teams               map[string]*GithubTeam
+	teamRepos           map[string]map[string]*GithubTeamRepo
+	teamSlugByName      map[string]string
+	rulesets            map[string]*GithubRuleSet
+	appIds              map[string]int
 }
 
 func NewGoliacRemoteImpl(client github.GitHubClient) *GoliacRemoteImpl {
 	return &GoliacRemoteImpl{
-		client:           client,
-		users:            make(map[string]string),
-		repositories:     make(map[string]*GithubRepository),
-		repositoriesById: make(map[string]*GithubRepository),
-		teams:            make(map[string]*GithubTeam),
-		teamRepos:        make(map[string]map[string]*GithubTeamRepo),
-		teamSlugByName:   make(map[string]string),
+		client:              client,
+		users:               make(map[string]string),
+		repositories:        make(map[string]*GithubRepository),
+		repositoriesByRefId: make(map[string]*GithubRepository),
+		teams:               make(map[string]*GithubTeam),
+		teamRepos:           make(map[string]map[string]*GithubTeamRepo),
+		teamSlugByName:      make(map[string]string),
+		rulesets:            make(map[string]*GithubRuleSet),
+		appIds:              make(map[string]int),
 	}
+}
+
+func (g *GoliacRemoteImpl) RuleSets() map[string]*GithubRuleSet {
+	return g.rulesets
+}
+
+func (g *GoliacRemoteImpl) AppIds() map[string]int {
+	return g.appIds
 }
 
 func (g *GoliacRemoteImpl) Users() map[string]string {
@@ -88,8 +103,8 @@ func (g *GoliacRemoteImpl) Teams() map[string]*GithubTeam {
 func (g *GoliacRemoteImpl) Repositories() map[string]*GithubRepository {
 	return g.repositories
 }
-func (g *GoliacRemoteImpl) RepositoriesById() map[string]*GithubRepository {
-	return g.repositoriesById
+func (g *GoliacRemoteImpl) RepositoriesByRefId() map[string]*GithubRepository {
+	return g.repositoriesByRefId
 }
 func (g *GoliacRemoteImpl) TeamRepositories() map[string]map[string]*GithubTeamRepo {
 	return g.teamRepos
@@ -185,6 +200,7 @@ query listAllReposInOrg($orgLogin: String!, $endCursor: String) {
         nodes {
           name
 		  id
+		  databaseId
           isArchived
           isPrivate
         }
@@ -205,6 +221,7 @@ type GraplQLRepositories struct {
 				Nodes []struct {
 					Name       string
 					Id         string
+					DatabaseId int
 					IsArchived bool
 					IsPrivate  bool
 				} `json:"nodes"`
@@ -230,7 +247,7 @@ type GraplQLRepositories struct {
 
 func (g *GoliacRemoteImpl) loadRepositories() error {
 	g.repositories = make(map[string]*GithubRepository)
-	g.repositoriesById = make(map[string]*GithubRepository)
+	g.repositoriesByRefId = make(map[string]*GithubRepository)
 
 	variables := make(map[string]interface{})
 	variables["orgLogin"] = config.Config.GithubAppOrganization
@@ -254,12 +271,13 @@ func (g *GoliacRemoteImpl) loadRepositories() error {
 		for _, c := range gResult.Data.Organization.Repositories.Nodes {
 			repo := &GithubRepository{
 				Name:       c.Name,
-				Id:         c.Id,
+				Id:         c.DatabaseId,
+				RefId:      c.Id,
 				IsArchived: c.IsArchived,
 				IsPrivate:  c.IsPrivate,
 			}
 			g.repositories[c.Name] = repo
-			g.repositoriesById[c.Id] = repo
+			g.repositoriesByRefId[c.Id] = repo
 		}
 
 		hasNextPage = gResult.Data.Organization.Repositories.PageInfo.HasNextPage
@@ -375,6 +393,39 @@ type GraplQLTeamsRepos struct {
 	} `json:"errors"`
 }
 
+func (g *GoliacRemoteImpl) loadAppIds() error {
+	type Installation struct {
+		TotalClount   int `json:"total_count"`
+		Installations []struct {
+			Id      int    `json:"id"`
+			AppId   int    `json:"app_id"`
+			Name    string `json:"name"`
+			AppSlug string `json:"app_slug"`
+		} `json:"installations"`
+	}
+	// https://docs.github.com/en/enterprise-cloud@latest/rest/orgs/orgs?apiVersion=2022-11-28#list-app-installations-for-an-organization
+	body, err := g.client.CallRestAPI(fmt.Sprintf("/orgs/%s/installations", config.Config.GithubAppOrganization),
+		"GET",
+		nil)
+
+	if err != nil {
+		return fmt.Errorf("not able to list github apps: %v. %s", err, string(body))
+	}
+
+	var installations Installation
+	json.Unmarshal(body, &installations)
+	if err != nil {
+		return fmt.Errorf("not able to list github apps: %v", err)
+	}
+
+	g.appIds = map[string]int{}
+	for _, i := range installations.Installations {
+		g.appIds[i.AppSlug] = i.AppId
+	}
+
+	return nil
+}
+
 func (g *GoliacRemoteImpl) Load(repoconfig *config.RepositoryConfig) error {
 	err := g.loadOrgUsers()
 	if err != nil {
@@ -387,6 +438,16 @@ func (g *GoliacRemoteImpl) Load(repoconfig *config.RepositoryConfig) error {
 	}
 
 	err = g.loadTeams()
+	if err != nil {
+		return err
+	}
+
+	err = g.loadAppIds()
+	if err != nil {
+		return err
+	}
+
+	err = g.loadRulesets()
 	if err != nil {
 		return err
 	}
@@ -659,18 +720,15 @@ query listRulesets ($orgLogin: String!) {
 	organization(login: $orgLogin) {
 	  rulesets(first: 100) { 
 		nodes {
+		  databaseId
+		  name
+		  target
+		  enforcement
 		  bypassActors(first:100) {
 			app:nodes {
 			  actor {
 				... on App {
-					name
-				}
-			  }
-			  bypassMode
-			}
-			team:nodes {
-			  actor {
-				... on Team {
+					databaseId
 					name
 				}
 			  }
@@ -694,41 +752,287 @@ query listRulesets ($orgLogin: String!) {
 			nodes {
 				parameters {
 					... on PullRequestParameters {
+						dismissStaleReviewsOnPush
+						requireCodeOwnerReview
 						requiredApprovingReviewCount
+						requiredReviewThreadResolution
+						requireLastPushApproval
 					}
 				}
 				type
 			}
 		  }
 		}
+		pageInfo {
+            hasNextPage
+            endCursor
+		}
+		totalCount
 	  }
 	}
   }
 `
 
+type GithubRuleSetApp struct {
+	Actor struct {
+		DatabaseId int
+		Name       string
+	}
+	BypassMode string // ALWAYS, PULL_REQUEST
+}
+
+type GithubRuleSetRuleStatusCheck struct {
+	Context       string
+	IntegrationId int
+}
+
+type GithubRuleSetRule struct {
+	Parameters struct {
+		// PullRequestParameters
+		DismissStaleReviewsOnPush      bool
+		RequireCodeOwnerReview         bool
+		RequiredApprovingReviewCount   int
+		RequiredReviewThreadResolution bool
+		RequireLastPushApproval        bool
+
+		// RequiredStatusChecksParameters
+		RequiredStatusChecks             []GithubRuleSetRuleStatusCheck
+		StrictRequiredStatusChecksPolicy bool
+	}
+	ID   int
+	Type string // CREATION, UPDATE, DELETION, REQUIRED_LINEAR_HISTORY, REQUIRED_DEPLOYMENTS, REQUIRED_SIGNATURES, PULL_REQUEST, REQUIRED_STATUS_CHECKS, NON_FAST_FORWARD, COMMIT_MESSAGE_PATTERN, COMMIT_AUTHOR_EMAIL_PATTERN, COMMITTER_EMAIL_PATTERN, BRANCH_NAME_PATTERN, TAG_NAME_PATTERN
+}
+
+type GithubRuleSet struct {
+	DatabaseId   int
+	Name         string
+	Target       string // BRANCH, TAG
+	Enforcement  string // DISABLED, ACTIVE, EVALUATE
+	BypassActors struct {
+		App []GithubRuleSetApp
+	}
+	Conditions struct {
+		RefName struct { // target branches
+			Include []string // ~DEFAULT_BRANCH, ~ALL,
+			Exclude []string
+		}
+		RepositoryName struct { // regex
+			Include   []string
+			Exclude   []string
+			Protected bool
+		}
+		RepositoryId struct { // per repo
+			RepositoryIds []string
+		}
+	}
+	Rules struct {
+		Nodes []GithubRuleSetRule
+	}
+}
+
+type GraplQLRuleSets struct {
+	Data struct {
+		Organization struct {
+			Rulesets struct {
+				Nodes    []GithubRuleSet
+				PageInfo struct {
+					HasNextPage bool
+					EndCursor   string
+				} `json:"pageInfo"`
+				TotalCount int `json:"totalCount"`
+			} `json:"rulesets"`
+		}
+	}
+	Errors []struct {
+		Path       []string `json:"path"`
+		Extensions struct {
+			Code         string
+			ErrorMessage string
+		} `json:"extensions"`
+		Message string
+	} `json:"errors"`
+}
+
+func (g *GoliacRemoteImpl) loadRulesets() error {
+	variables := make(map[string]interface{})
+	variables["orgLogin"] = config.Config.GithubAppOrganization
+	variables["endCursor"] = nil
+
+	rulesets := make(map[string]*GithubRuleSet)
+
+	hasNextPage := true
+	count := 0
+	for hasNextPage {
+		data, err := g.client.QueryGraphQLAPI(listRulesets, variables)
+		var gResult GraplQLRuleSets
+
+		// parse first page
+		err = json.Unmarshal(data, &gResult)
+		if err != nil {
+			return err
+		}
+		if len(gResult.Errors) > 0 {
+			return fmt.Errorf("Graphql error: %v", gResult.Errors[0].Message)
+		}
+
+		for _, c := range gResult.Data.Organization.Rulesets.Nodes {
+			rulesets[c.Name] = &c
+		}
+
+		hasNextPage = gResult.Data.Organization.Rulesets.PageInfo.HasNextPage
+		variables["endCursor"] = gResult.Data.Organization.Rulesets.PageInfo.EndCursor
+
+		count++
+		// sanity check to avoid loops
+		if count > FORLOOP_STOP {
+			break
+		}
+	}
+
+	g.rulesets = rulesets
+	return nil
+}
+
+func (g *GoliacRemoteImpl) prepareRuleset(ruleset *GithubRuleSet) map[string]interface{} {
+	bypassActors := make([]map[string]interface{}, 0)
+
+	for _, app := range ruleset.BypassActors.App {
+		// let's find the app id based on the app slug name
+		if appId, ok := g.appIds[app.Actor.Name]; ok {
+			bypassActor := map[string]interface{}{
+				"actor_id":    appId,
+				"actor_type":  "Integration",
+				"bypass_mode": "always",
+			}
+			bypassActors = append(bypassActors, bypassActor)
+		}
+	}
+
+	repoIds := []int{}
+	for _, r := range ruleset.Conditions.RepositoryId.RepositoryIds {
+		if rid, ok := g.repositories[r]; ok {
+			repoIds = append(repoIds, rid.Id)
+		}
+	}
+	include := ruleset.Conditions.RefName.Include
+	if include == nil {
+		include = []string{}
+	}
+	exclude := ruleset.Conditions.RefName.Exclude
+	if exclude == nil {
+		exclude = []string{}
+	}
+	conditions := map[string]interface{}{
+		"ref_name": map[string]interface{}{
+			"include": include,
+			"exclude": exclude,
+		},
+		"repository_id": map[string]interface{}{
+			"repository_ids": repoIds,
+		},
+	}
+
+	rules := make([]map[string]interface{}, 0)
+	for _, rule := range ruleset.Rules.Nodes {
+		switch rule.Type {
+		case "required_signatures":
+			rules = append(rules, map[string]interface{}{
+				"type": "required_signatures",
+			})
+			break
+		case "pull_request":
+			rules = append(rules, map[string]interface{}{
+				"type": "pull_request",
+				"parameters": map[string]interface{}{
+					"dismiss_stale_reviews_on_push":     rule.Parameters.DismissStaleReviewsOnPush,
+					"require_code_owner_review":         rule.Parameters.RequireCodeOwnerReview,
+					"required_approving_review_count":   rule.Parameters.RequiredApprovingReviewCount,
+					"required_review_thread_resolution": rule.Parameters.RequiredReviewThreadResolution,
+					"require_last_push_approval":        rule.Parameters.RequireLastPushApproval,
+				},
+			})
+			break
+		}
+	}
+
+	payload := map[string]interface{}{
+		"name":          ruleset.Name,
+		"target":        "branch",
+		"enforcement":   ruleset.Enforcement,
+		"bypass_actors": bypassActors,
+		"conditions":    conditions,
+		"rules":         rules,
+	}
+	return payload
+}
+
+func (g *GoliacRemoteImpl) AddRuleset(ruleset *GithubRuleSet) {
+	// add ruleset
+	// https://docs.github.com/en/enterprise-cloud@latest/rest/orgs/rules?apiVersion=2022-11-28#create-an-organization-repository-ruleset
+
+	body, err := g.client.CallRestAPI(
+		fmt.Sprintf("/orgs/%s/rulesets", config.Config.GithubAppOrganization),
+		"POST",
+		g.prepareRuleset(ruleset),
+	)
+	if err != nil {
+		logrus.Errorf("failed to add ruleset to org: %v. %s", err, string(body))
+	}
+}
+
+func (g *GoliacRemoteImpl) UpdateRuleset(ruleset *GithubRuleSet) {
+	// add ruleset
+	// https://docs.github.com/en/enterprise-cloud@latest/rest/orgs/rules?apiVersion=2022-11-28#update-an-organization-repository-ruleset
+
+	body, err := g.client.CallRestAPI(
+
+		fmt.Sprintf("/orgs/%s/rulesets/%d", config.Config.GithubAppOrganization, ruleset.DatabaseId),
+		"PUT",
+		g.prepareRuleset(ruleset),
+	)
+	if err != nil {
+		logrus.Errorf("failed to update ruleset to org: %v. %s", err, string(body))
+	}
+}
+
+func (g *GoliacRemoteImpl) DeleteRuleset(rulesetid int) {
+	// add ruleset
+	// https://docs.github.com/en/enterprise-cloud@latest/rest/orgs/rules?apiVersion=2022-11-28#delete-an-organization-repository-ruleset
+
+	_, err := g.client.CallRestAPI(
+
+		fmt.Sprintf("/orgs/%s/rulesets/%d", config.Config.GithubAppOrganization, rulesetid),
+		"DELETE",
+		nil,
+	)
+	if err != nil {
+		logrus.Errorf("failed to remove ruleset to org: %v", err)
+	}
+}
+
 func (g *GoliacRemoteImpl) AddUserToOrg(ghuserid string) {
 	// add member
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#create-a-team
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/memberships/%s", config.Config.GithubAppOrganization, ghuserid),
 		"PUT",
 		map[string]interface{}{"role": "member"},
 	)
 	if err != nil {
-		logrus.Errorf("failed to add user to org: %v", err)
+		logrus.Errorf("failed to add user to org: %v. %s", err, string(body))
 	}
 }
 
 func (g *GoliacRemoteImpl) RemoveUserFromOrg(ghuserid string) {
 	// remove member
 	// https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#remove-organization-membership-for-a-user
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/memberships/%s", config.Config.GithubAppOrganization, ghuserid),
 		"DELETE",
 		nil,
 	)
 	if err != nil {
-		logrus.Errorf("failed to remove user from org: %v", err)
+		logrus.Errorf("failed to remove user from org: %v. %s", err, string(body))
 	}
 }
 
@@ -746,7 +1050,7 @@ func (g *GoliacRemoteImpl) CreateTeam(teamname string, description string, membe
 		map[string]interface{}{"name": teamname, "description": description, "privacy": "closed"},
 	)
 	if err != nil {
-		logrus.Errorf("failed to create team: %v", err)
+		logrus.Errorf("failed to create team: %v. %s", err, string(body))
 		return
 	}
 	var res CreateTeamResponse
@@ -759,13 +1063,13 @@ func (g *GoliacRemoteImpl) CreateTeam(teamname string, description string, membe
 	// add members
 	for _, member := range members {
 		// https://docs.github.com/en/rest/teams/members?apiVersion=2022-11-28#add-or-update-team-membership-for-a-user
-		_, err := g.client.CallRestAPI(
+		body, err := g.client.CallRestAPI(
 			fmt.Sprintf("orgs/%s/teams/%s/memberships/%s", config.Config.GithubAppOrganization, res.Slug, member),
 			"PUT",
 			map[string]interface{}{"role": "member"},
 		)
 		if err != nil {
-			logrus.Errorf("failed to create team: %v", err)
+			logrus.Errorf("failed to create team: %v. %s", err, string(body))
 			return
 		}
 	}
@@ -774,42 +1078,43 @@ func (g *GoliacRemoteImpl) CreateTeam(teamname string, description string, membe
 // role = member or maintainer (usually we use member)
 func (g *GoliacRemoteImpl) UpdateTeamAddMember(teamslug string, username string, role string) {
 	// https://docs.github.com/en/rest/teams/members?apiVersion=2022-11-28#add-or-update-team-membership-for-a-user
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/teams/%s/memberships/%s", config.Config.GithubAppOrganization, teamslug, username),
 		"PUT",
 		map[string]interface{}{"role": role},
 	)
 	if err != nil {
-		logrus.Errorf("failed to add team member: %v", err)
+		logrus.Errorf("failed to add team member: %v. %s", err, string(body))
 	}
 }
 
 func (g *GoliacRemoteImpl) UpdateTeamRemoveMember(teamslug string, username string) {
 	// https://docs.github.com/en/rest/teams/members?apiVersion=2022-11-28#add-or-update-team-membership-for-a-user
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("orgs/%s/teams/%s/memberships/%s", config.Config.GithubAppOrganization, teamslug, username),
 		"DELETE",
 		nil,
 	)
 	if err != nil {
-		logrus.Errorf("failed to remove team member: %v", err)
+		logrus.Errorf("failed to remove team member: %v. %s", err, string(body))
 	}
 }
 
 func (g *GoliacRemoteImpl) DeleteTeam(teamslug string) {
 	// delete team
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#delete-a-team
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/teams/%s", config.Config.GithubAppOrganization, teamslug),
 		"DELETE",
 		nil,
 	)
 	if err != nil {
-		logrus.Errorf("failed to delete a team: %v", err)
+		logrus.Errorf("failed to delete a team: %v. %s", err, string(body))
 	}
 }
 
 type CreateRepositoryResponse struct {
+	Id     int    `json:"id"`
 	NodeId string `json:"node_id"`
 }
 
@@ -822,7 +1127,7 @@ func (g *GoliacRemoteImpl) CreateRepository(reponame string, description string,
 		map[string]interface{}{"name": reponame, "description": description, "private": !public},
 	)
 	if err != nil {
-		logrus.Errorf("failed to create repository: %v", err)
+		logrus.Errorf("failed to create repository: %v. %s", err, string(body))
 		return
 	}
 
@@ -837,35 +1142,36 @@ func (g *GoliacRemoteImpl) CreateRepository(reponame string, description string,
 	// update the repositories list
 	newRepo := &GithubRepository{
 		Name:       reponame,
-		Id:         resp.NodeId,
+		Id:         resp.Id,
+		RefId:      resp.NodeId,
 		IsArchived: false,
 		IsPrivate:  !public,
 	}
 	g.repositories[reponame] = newRepo
-	g.repositoriesById[resp.NodeId] = newRepo
+	g.repositoriesByRefId[resp.NodeId] = newRepo
 
 	// add members
 	for _, reader := range readers {
 		// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#add-or-update-team-repository-permissions
-		_, err := g.client.CallRestAPI(
+		body, err := g.client.CallRestAPI(
 			fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", config.Config.GithubAppOrganization, reader, config.Config.GithubAppOrganization, reponame),
 			"PUT",
 			map[string]interface{}{"permission": "pull"},
 		)
 		if err != nil {
-			logrus.Errorf("failed to create repository (and add members): %v", err)
+			logrus.Errorf("failed to create repository (and add members): %v. %s", err, string(body))
 			return
 		}
 	}
 	for _, writer := range writers {
 		// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#add-or-update-team-repository-permissions
-		_, err := g.client.CallRestAPI(
+		body, err := g.client.CallRestAPI(
 			fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", config.Config.GithubAppOrganization, writer, config.Config.GithubAppOrganization, reponame),
 			"PUT",
 			map[string]interface{}{"permission": "push"},
 		)
 		if err != nil {
-			logrus.Errorf("failed to create repository (and add members): %v", err)
+			logrus.Errorf("failed to create repository (and add members): %v. %s", err, string(body))
 		}
 	}
 }
@@ -873,80 +1179,80 @@ func (g *GoliacRemoteImpl) CreateRepository(reponame string, description string,
 func (g *GoliacRemoteImpl) UpdateRepositoryAddTeamAccess(reponame string, teamslug string, permission string) {
 	// update member
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#add-or-update-team-repository-permissions
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/teams/%s/repos/%s/%s", config.Config.GithubAppOrganization, teamslug, config.Config.GithubAppOrganization, reponame),
 		"PUT",
 		map[string]interface{}{"permission": permission},
 	)
 	if err != nil {
-		logrus.Errorf("failed to add team access: %v", err)
+		logrus.Errorf("failed to add team access: %v. %s", err, string(body))
 	}
 }
 
 func (g *GoliacRemoteImpl) UpdateRepositoryUpdateTeamAccess(reponame string, teamslug string, permission string) {
 	// update member
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#add-or-update-team-repository-permissions
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/teams/%s/repos/%s/%s", config.Config.GithubAppOrganization, teamslug, config.Config.GithubAppOrganization, reponame),
 		"PUT",
 		map[string]interface{}{"permission": permission},
 	)
 	if err != nil {
-		logrus.Errorf("failed to add team access: %v", err)
+		logrus.Errorf("failed to add team access: %v. %s", err, string(body))
 	}
 }
 
 func (g *GoliacRemoteImpl) UpdateRepositoryRemoveTeamAccess(reponame string, teamslug string) {
 	// delete member
 	// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#remove-a-repository-from-a-team
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", config.Config.GithubAppOrganization, teamslug, config.Config.GithubAppOrganization, reponame),
 		"DELETE",
 		nil,
 	)
 	if err != nil {
-		logrus.Errorf("failed to remove team access: %v", err)
+		logrus.Errorf("failed to remove team access: %. %s", err, string(body))
 	}
 }
 
 func (g *GoliacRemoteImpl) UpdateRepositoryUpdatePrivate(reponame string, private bool) {
 	// https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#update-a-repository
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("repos/%s/%s", config.Config.GithubAppOrganization, reponame),
 		"PATCH",
 		map[string]interface{}{"private": private},
 	)
 	if err != nil {
-		logrus.Errorf("failed to update repository private setting: %v", err)
+		logrus.Errorf("failed to update repository private setting: %v. %s", err, string(body))
 	}
 }
 func (g *GoliacRemoteImpl) UpdateRepositoryUpdateArchived(reponame string, archived bool) {
 	// https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#update-a-repository
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("repos/%s/%s", config.Config.GithubAppOrganization, reponame),
 		"PATCH",
 		map[string]interface{}{"archived": archived},
 	)
 	if err != nil {
-		logrus.Errorf("failed to update repository archive setting: %v", err)
+		logrus.Errorf("failed to update repository archive setting: %v. %s", err, string(body))
 	}
 }
 
 func (g *GoliacRemoteImpl) DeleteRepository(reponame string) {
 	// delete repo
 	// https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#delete-a-repository
-	_, err := g.client.CallRestAPI(
+	body, err := g.client.CallRestAPI(
 		fmt.Sprintf("/orgs/%s/%s", config.Config.GithubAppOrganization, reponame),
 		"DELETE",
 		nil,
 	)
 	if err != nil {
-		logrus.Errorf("failed to delete repository: %v", err)
+		logrus.Errorf("failed to delete repository: %v. %s", err, string(body))
 	}
 
 	// update the repositories list
 	if r, ok := g.repositories[reponame]; ok {
-		delete(g.repositoriesById, r.Id)
+		delete(g.repositoriesByRefId, r.RefId)
 		delete(g.repositories, reponame)
 	}
 

@@ -5,8 +5,9 @@ import (
 )
 
 type RepositoryConfig struct {
-	AdminTeam string `yaml:"admin_team"`
-	Rulesets  []struct {
+	AdminTeam      string `yaml:"admin_team"`
+	EnableRulesets bool   `yaml:"enable_rulesets"`
+	Rulesets       []struct {
 		Pattern string
 		Ruleset string
 	}
@@ -21,6 +22,7 @@ type RepositoryConfig struct {
 		AllowDestructiveRepositories bool `yaml:"allow_destructive_repositories"`
 		AllowDestructiveTeams        bool `yaml:"allow_destructive_teams"`
 		AllowDestructiveUsers        bool `yaml:"allow_destructive_users"`
+		AllowDestructiveRulesets     bool `yaml:"allow_destructive_rulesets"`
 	} `yaml:"destructive_operations"`
 }
 

@@ -269,13 +269,12 @@ func (client *GitHubClientImpl) CallRestAPI(endpoint, method string, body map[st
 		// Retry the request.
 		return client.CallRestAPI(endpoint, method, body)
 	} else {
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("unexpected status: %s", resp.Status)
-		}
-
 		responseBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return responseBody, fmt.Errorf("unexpected status: %s", resp.Status)
 		}
 
 		return responseBody, nil

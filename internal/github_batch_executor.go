@@ -146,6 +146,27 @@ func (g *GithubBatchExecutor) DeleteRepository(reponame string) {
 	})
 }
 
+func (g *GithubBatchExecutor) AddRuleset(ruleset *GithubRuleSet) {
+	g.commands = append(g.commands, &GithubCommandAddRuletset{
+		client:  g.client,
+		ruleset: ruleset,
+	})
+}
+
+func (g *GithubBatchExecutor) UpdateRuleset(ruleset *GithubRuleSet) {
+	g.commands = append(g.commands, &GithubCommandUpdateRuletset{
+		client:  g.client,
+		ruleset: ruleset,
+	})
+}
+
+func (g *GithubBatchExecutor) DeleteRuleset(rulesetid int) {
+	g.commands = append(g.commands, &GithubCommandDeleteRuletset{
+		client:    g.client,
+		rulesetid: rulesetid,
+	})
+}
+
 func (g *GithubBatchExecutor) Begin() {
 	g.commands = make([]GithubCommand, 0)
 }
@@ -294,4 +315,31 @@ type GithubCommandUpdateTeamRemoveMember struct {
 
 func (g *GithubCommandUpdateTeamRemoveMember) Apply() {
 	g.client.UpdateTeamRemoveMember(g.teamslug, g.member)
+}
+
+type GithubCommandAddRuletset struct {
+	client  ReconciliatorExecutor
+	ruleset *GithubRuleSet
+}
+
+func (g *GithubCommandAddRuletset) Apply() {
+	g.client.AddRuleset(g.ruleset)
+}
+
+type GithubCommandUpdateRuletset struct {
+	client  ReconciliatorExecutor
+	ruleset *GithubRuleSet
+}
+
+func (g *GithubCommandUpdateRuletset) Apply() {
+	g.client.UpdateRuleset(g.ruleset)
+}
+
+type GithubCommandDeleteRuletset struct {
+	client    ReconciliatorExecutor
+	rulesetid int
+}
+
+func (g *GithubCommandDeleteRuletset) Apply() {
+	g.client.DeleteRuleset(g.rulesetid)
 }
