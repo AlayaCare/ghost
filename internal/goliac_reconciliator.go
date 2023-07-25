@@ -347,7 +347,6 @@ func (r *GoliacReconciliatorImpl) reconciliateRulesets(local GoliacLocal, remote
 			Rules:       map[string]entity.RuleSetParameters{},
 		}
 		for _, b := range rs.BypassApps {
-			fmt.Println("debug0", b.AppName)
 			grs.BypassApps[b.AppName] = b.Mode
 		}
 		for _, r := range rs.Rules {
@@ -359,7 +358,6 @@ func (r *GoliacReconciliatorImpl) reconciliateRulesets(local GoliacLocal, remote
 			}
 		}
 		lgrs[rs.Metadata.Name] = &grs
-		fmt.Println(lgrs)
 	}
 
 	// prepare remote comparable
