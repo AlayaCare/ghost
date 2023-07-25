@@ -3,9 +3,11 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/Alayacare/goliac/internal/config"
+	"github.com/Alayacare/goliac/internal/entity"
 	"github.com/Alayacare/goliac/internal/github"
 	"github.com/sirupsen/logrus"
 )
@@ -25,7 +27,6 @@ type GoliacRemote interface {
 	TeamSlugByName() map[string]string
 	Teams() map[string]*GithubTeam                           // the key is the team slug
 	Repositories() map[string]*GithubRepository              // the key is the repository name
-	RepositoriesByRefId() map[string]*GithubRepository       // the key is the repository id
 	TeamRepositories() map[string]map[string]*GithubTeamRepo // key is team slug, second key is repo name
 	RuleSets() map[string]*GithubRuleSet
 	AppIds() map[string]int
@@ -102,9 +103,6 @@ func (g *GoliacRemoteImpl) Teams() map[string]*GithubTeam {
 }
 func (g *GoliacRemoteImpl) Repositories() map[string]*GithubRepository {
 	return g.repositories
-}
-func (g *GoliacRemoteImpl) RepositoriesByRefId() map[string]*GithubRepository {
-	return g.repositoriesByRefId
 }
 func (g *GoliacRemoteImpl) TeamRepositories() map[string]map[string]*GithubTeamRepo {
 	return g.teamRepos
@@ -803,7 +801,7 @@ type GithubRuleSetRule struct {
 	Type string // CREATION, UPDATE, DELETION, REQUIRED_LINEAR_HISTORY, REQUIRED_DEPLOYMENTS, REQUIRED_SIGNATURES, PULL_REQUEST, REQUIRED_STATUS_CHECKS, NON_FAST_FORWARD, COMMIT_MESSAGE_PATTERN, COMMIT_AUTHOR_EMAIL_PATTERN, COMMITTER_EMAIL_PATTERN, BRANCH_NAME_PATTERN, TAG_NAME_PATTERN
 }
 
-type GithubRuleSet struct {
+type GraphQLGithubRuleSet struct {
 	DatabaseId   int
 	Name         string
 	Target       string // BRANCH, TAG
@@ -834,7 +832,7 @@ type GraplQLRuleSets struct {
 	Data struct {
 		Organization struct {
 			Rulesets struct {
-				Nodes    []GithubRuleSet
+				Nodes    []GraphQLGithubRuleSet
 				PageInfo struct {
 					HasNextPage bool
 					EndCursor   string
@@ -851,6 +849,59 @@ type GraplQLRuleSets struct {
 		} `json:"extensions"`
 		Message string
 	} `json:"errors"`
+}
+
+type GithubRuleSet struct {
+	Name        string
+	Id          int               // for tracking purpose
+	Enforcement string            // disabled, active, evaluate
+	BypassApps  map[string]string // appname, mode (always, pull_request)
+
+	OnInclude []string // ~DEFAULT_BRANCH, ~ALL, branch_name, ...
+	OnExclude []string //  branch_name, ...
+
+	Rules map[string]entity.RuleSetParameters
+
+	Repositories []string
+}
+
+func (g *GoliacRemoteImpl) fromGraphQLToGithubRulset(src *GraphQLGithubRuleSet) *GithubRuleSet {
+	ruleset := GithubRuleSet{
+		Name:         src.Name,
+		Id:           src.DatabaseId,
+		Enforcement:  strings.ToLower(src.Enforcement),
+		BypassApps:   map[string]string{},
+		OnInclude:    src.Conditions.RefName.Include,
+		OnExclude:    src.Conditions.RefName.Exclude,
+		Rules:        map[string]entity.RuleSetParameters{},
+		Repositories: []string{},
+	}
+	for _, b := range src.BypassActors.App {
+		ruleset.BypassApps[b.Actor.Name] = strings.ToLower(b.BypassMode)
+	}
+
+	for _, r := range src.Rules.Nodes {
+		rule := entity.RuleSetParameters{
+			DismissStaleReviewsOnPush:        r.Parameters.DismissStaleReviewsOnPush,
+			RequireCodeOwnerReview:           r.Parameters.RequireCodeOwnerReview,
+			RequiredApprovingReviewCount:     r.Parameters.RequiredApprovingReviewCount,
+			RequiredReviewThreadResolution:   r.Parameters.RequiredReviewThreadResolution,
+			RequireLastPushApproval:          r.Parameters.RequireLastPushApproval,
+			StrictRequiredStatusChecksPolicy: r.Parameters.StrictRequiredStatusChecksPolicy,
+		}
+		for _, s := range r.Parameters.RequiredStatusChecks {
+			rule.RequiredStatusChecks = append(rule.RequiredStatusChecks, s.Context)
+		}
+		ruleset.Rules[strings.ToLower(r.Type)] = rule
+	}
+
+	for _, r := range src.Conditions.RepositoryId.RepositoryIds {
+		if repo, ok := g.repositoriesByRefId[r]; ok {
+			ruleset.Repositories = append(ruleset.Repositories, repo.Name)
+		}
+	}
+
+	return &ruleset
 }
 
 func (g *GoliacRemoteImpl) loadRulesets() error {
@@ -876,7 +927,7 @@ func (g *GoliacRemoteImpl) loadRulesets() error {
 		}
 
 		for _, c := range gResult.Data.Organization.Rulesets.Nodes {
-			rulesets[c.Name] = &c
+			rulesets[c.Name] = g.fromGraphQLToGithubRulset(&c)
 		}
 
 		hasNextPage = gResult.Data.Organization.Rulesets.PageInfo.HasNextPage
@@ -896,29 +947,29 @@ func (g *GoliacRemoteImpl) loadRulesets() error {
 func (g *GoliacRemoteImpl) prepareRuleset(ruleset *GithubRuleSet) map[string]interface{} {
 	bypassActors := make([]map[string]interface{}, 0)
 
-	for _, app := range ruleset.BypassActors.App {
+	for appname, mode := range ruleset.BypassApps {
 		// let's find the app id based on the app slug name
-		if appId, ok := g.appIds[app.Actor.Name]; ok {
+		if appId, ok := g.appIds[appname]; ok {
 			bypassActor := map[string]interface{}{
 				"actor_id":    appId,
 				"actor_type":  "Integration",
-				"bypass_mode": "always",
+				"bypass_mode": mode,
 			}
 			bypassActors = append(bypassActors, bypassActor)
 		}
 	}
 
 	repoIds := []int{}
-	for _, r := range ruleset.Conditions.RepositoryId.RepositoryIds {
+	for _, r := range ruleset.Repositories {
 		if rid, ok := g.repositories[r]; ok {
 			repoIds = append(repoIds, rid.Id)
 		}
 	}
-	include := ruleset.Conditions.RefName.Include
+	include := ruleset.OnInclude
 	if include == nil {
 		include = []string{}
 	}
-	exclude := ruleset.Conditions.RefName.Exclude
+	exclude := ruleset.OnExclude
 	if exclude == nil {
 		exclude = []string{}
 	}
@@ -933,8 +984,8 @@ func (g *GoliacRemoteImpl) prepareRuleset(ruleset *GithubRuleSet) map[string]int
 	}
 
 	rules := make([]map[string]interface{}, 0)
-	for _, rule := range ruleset.Rules.Nodes {
-		switch rule.Type {
+	for ruletype, rule := range ruleset.Rules {
+		switch ruletype {
 		case "required_signatures":
 			rules = append(rules, map[string]interface{}{
 				"type": "required_signatures",
@@ -944,11 +995,11 @@ func (g *GoliacRemoteImpl) prepareRuleset(ruleset *GithubRuleSet) map[string]int
 			rules = append(rules, map[string]interface{}{
 				"type": "pull_request",
 				"parameters": map[string]interface{}{
-					"dismiss_stale_reviews_on_push":     rule.Parameters.DismissStaleReviewsOnPush,
-					"require_code_owner_review":         rule.Parameters.RequireCodeOwnerReview,
-					"required_approving_review_count":   rule.Parameters.RequiredApprovingReviewCount,
-					"required_review_thread_resolution": rule.Parameters.RequiredReviewThreadResolution,
-					"require_last_push_approval":        rule.Parameters.RequireLastPushApproval,
+					"dismiss_stale_reviews_on_push":     rule.DismissStaleReviewsOnPush,
+					"require_code_owner_review":         rule.RequireCodeOwnerReview,
+					"required_approving_review_count":   rule.RequiredApprovingReviewCount,
+					"required_review_thread_resolution": rule.RequiredReviewThreadResolution,
+					"require_last_push_approval":        rule.RequireLastPushApproval,
 				},
 			})
 			break
@@ -985,13 +1036,12 @@ func (g *GoliacRemoteImpl) UpdateRuleset(ruleset *GithubRuleSet) {
 	// https://docs.github.com/en/enterprise-cloud@latest/rest/orgs/rules?apiVersion=2022-11-28#update-an-organization-repository-ruleset
 
 	body, err := g.client.CallRestAPI(
-
-		fmt.Sprintf("/orgs/%s/rulesets/%d", config.Config.GithubAppOrganization, ruleset.DatabaseId),
+		fmt.Sprintf("/orgs/%s/rulesets/%d", config.Config.GithubAppOrganization, ruleset.Id),
 		"PUT",
 		g.prepareRuleset(ruleset),
 	)
 	if err != nil {
-		logrus.Errorf("failed to update ruleset to org: %v. %s", err, string(body))
+		logrus.Errorf("failed to update ruleset %d to org: %v. %s", ruleset.Id, err, string(body))
 	}
 }
 

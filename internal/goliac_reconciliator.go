@@ -309,24 +309,10 @@ func (r *GoliacReconciliatorImpl) reconciliateRepositories(local GoliacLocal, re
 	return nil
 }
 
-type GithubRulesetComparable struct {
-	Name        string
-	Id          int               // for tracking purpose
-	Enforcement string            // disabled, active, evaluate
-	BypassApps  map[string]string // appname, mode (always, pull_request)
-
-	OnInclude []string // ~DEFAULT_BRANCH, ~ALL, branch_name, ...
-	OnExclude []string //  branch_name, ...
-
-	Rules map[string]entity.RuleSetParameters
-
-	Repositories []string
-}
-
 func (r *GoliacReconciliatorImpl) reconciliateRulesets(local GoliacLocal, remote *MutableGoliacRemoteImpl, conf *config.RepositoryConfig, dryrun bool) error {
 	repositories := local.Repositories()
 
-	lgrs := map[string]*GithubRulesetComparable{}
+	lgrs := map[string]*GithubRuleSet{}
 	// prepare local comparable
 	for _, confrs := range conf.Rulesets {
 		match, err := regexp.Compile(confrs.Pattern)
@@ -338,7 +324,7 @@ func (r *GoliacReconciliatorImpl) reconciliateRulesets(local GoliacLocal, remote
 			return fmt.Errorf("Not able to find ruleset %s definition", confrs.Ruleset)
 		}
 
-		grs := GithubRulesetComparable{
+		grs := GithubRuleSet{
 			Name:        rs.Metadata.Name,
 			Enforcement: rs.Enforcement,
 			BypassApps:  map[string]string{},
@@ -361,49 +347,11 @@ func (r *GoliacReconciliatorImpl) reconciliateRulesets(local GoliacLocal, remote
 	}
 
 	// prepare remote comparable
-	rgrs := map[string]*GithubRulesetComparable{}
-	for _, rs := range remote.RuleSets() {
-		grs := &GithubRulesetComparable{
-			Name:         rs.Name,
-			Id:           rs.DatabaseId,
-			Enforcement:  strings.ToLower(rs.Enforcement),
-			BypassApps:   map[string]string{},
-			OnInclude:    rs.Conditions.RefName.Include,
-			OnExclude:    rs.Conditions.RefName.Exclude,
-			Rules:        map[string]entity.RuleSetParameters{},
-			Repositories: []string{},
-		}
-		for _, b := range rs.BypassActors.App {
-			grs.BypassApps[b.Actor.Name] = strings.ToLower(b.BypassMode)
-		}
-
-		for _, r := range rs.Rules.Nodes {
-			rule := entity.RuleSetParameters{
-				DismissStaleReviewsOnPush:        r.Parameters.DismissStaleReviewsOnPush,
-				RequireCodeOwnerReview:           r.Parameters.RequireCodeOwnerReview,
-				RequiredApprovingReviewCount:     r.Parameters.RequiredApprovingReviewCount,
-				RequiredReviewThreadResolution:   r.Parameters.RequiredReviewThreadResolution,
-				RequireLastPushApproval:          r.Parameters.RequireLastPushApproval,
-				StrictRequiredStatusChecksPolicy: r.Parameters.StrictRequiredStatusChecksPolicy,
-			}
-			for _, s := range r.Parameters.RequiredStatusChecks {
-				rule.RequiredStatusChecks = append(rule.RequiredStatusChecks, s.Context)
-			}
-			grs.Rules[strings.ToLower(r.Type)] = rule
-		}
-
-		for _, r := range rs.Conditions.RepositoryId.RepositoryIds {
-			if repo, ok := remote.RepositoryByRefId()[r]; ok {
-				grs.Repositories = append(grs.Repositories, repo.Name)
-			}
-		}
-
-		rgrs[rs.Name] = grs
-	}
+	rgrs := remote.RuleSets()
 
 	// prepare the diff computation
 
-	compareRulesets := func(lrs *GithubRulesetComparable, rrs *GithubRulesetComparable) bool {
+	compareRulesets := func(lrs *GithubRuleSet, rrs *GithubRuleSet) bool {
 		if lrs.Enforcement != rrs.Enforcement {
 			return false
 		}
@@ -436,109 +384,21 @@ func (r *GoliacReconciliatorImpl) reconciliateRulesets(local GoliacLocal, remote
 		return true
 	}
 
-	onAdded := func(rulesetname string, lRuleset *GithubRulesetComparable, rRuleset *GithubRulesetComparable) {
+	onAdded := func(rulesetname string, lRuleset *GithubRuleSet, rRuleset *GithubRuleSet) {
 		// CREATE ruleset
-		ruleset := &GithubRuleSet{
-			Name:        lRuleset.Name,
-			Target:      "branch",
-			Enforcement: lRuleset.Enforcement,
-		}
-		ruleset.BypassActors.App = make([]GithubRuleSetApp, 0)
-		ruleset.Rules.Nodes = make([]GithubRuleSetRule, 0)
 
-		// bypass actors
-		for appname, mode := range lRuleset.BypassApps {
-
-			if appid, ok := remote.AppIds()[appname]; ok {
-				app := GithubRuleSetApp{}
-				app.Actor.Name = appname
-				app.Actor.DatabaseId = appid
-				app.BypassMode = mode
-				ruleset.BypassActors.App = append(ruleset.BypassActors.App, app)
-			}
-		}
-
-		// conditions
-		ruleset.Conditions.RefName.Include = lRuleset.OnInclude
-		ruleset.Conditions.RefName.Exclude = lRuleset.OnExclude
-		ruleset.Conditions.RepositoryId.RepositoryIds = lRuleset.Repositories
-
-		// rules
-		for rType, r := range lRuleset.Rules {
-			rule := GithubRuleSetRule{
-				Type: rType,
-			}
-			rule.Parameters.DismissStaleReviewsOnPush = r.DismissStaleReviewsOnPush
-			rule.Parameters.RequireCodeOwnerReview = r.RequireCodeOwnerReview
-			rule.Parameters.RequireLastPushApproval = r.RequireLastPushApproval
-			rule.Parameters.RequiredApprovingReviewCount = r.RequiredApprovingReviewCount
-			rule.Parameters.RequiredReviewThreadResolution = r.RequiredReviewThreadResolution
-			rule.Parameters.RequiredStatusChecks = []GithubRuleSetRuleStatusCheck{}
-			for _, s := range r.RequiredStatusChecks {
-				rule.Parameters.RequiredStatusChecks = append(rule.Parameters.RequiredStatusChecks, GithubRuleSetRuleStatusCheck{
-					Context: s,
-				})
-			}
-			rule.Parameters.StrictRequiredStatusChecksPolicy = r.StrictRequiredStatusChecksPolicy
-			ruleset.Rules.Nodes = append(ruleset.Rules.Nodes, rule)
-		}
-
-		r.AddRuleset(dryrun, ruleset)
+		r.AddRuleset(dryrun, lRuleset)
 	}
 
-	onRemoved := func(rulesetname string, lRuleset *GithubRulesetComparable, rRuleset *GithubRulesetComparable) {
+	onRemoved := func(rulesetname string, lRuleset *GithubRuleSet, rRuleset *GithubRuleSet) {
 		// DELETE ruleset
 		r.DeleteRuleset(dryrun, rRuleset.Id)
 	}
 
-	onChanged := func(rulesetname string, lRuleset *GithubRulesetComparable, rRuleset *GithubRulesetComparable) {
+	onChanged := func(rulesetname string, lRuleset *GithubRuleSet, rRuleset *GithubRuleSet) {
 		// UPDATE ruleset
-		ruleset := &GithubRuleSet{
-			Name:        lRuleset.Name,
-			Target:      "branch",
-			Enforcement: lRuleset.Enforcement,
-		}
-		ruleset.BypassActors.App = make([]GithubRuleSetApp, 0)
-		ruleset.Rules.Nodes = make([]GithubRuleSetRule, 0)
-
-		// bypass actors
-		for appname, mode := range lRuleset.BypassApps {
-
-			if appid, ok := remote.AppIds()[appname]; ok {
-				app := GithubRuleSetApp{}
-				app.Actor.Name = appname
-				app.Actor.DatabaseId = appid
-				app.BypassMode = mode
-				ruleset.BypassActors.App = append(ruleset.BypassActors.App, app)
-			}
-		}
-
-		// conditions
-		ruleset.Conditions.RefName.Include = lRuleset.OnInclude
-		ruleset.Conditions.RefName.Exclude = lRuleset.OnExclude
-		ruleset.Conditions.RepositoryId.RepositoryIds = lRuleset.Repositories
-
-		// rules
-		for rType, r := range lRuleset.Rules {
-			rule := GithubRuleSetRule{
-				Type: rType,
-			}
-			rule.Parameters.DismissStaleReviewsOnPush = r.DismissStaleReviewsOnPush
-			rule.Parameters.RequireCodeOwnerReview = r.RequireCodeOwnerReview
-			rule.Parameters.RequireLastPushApproval = r.RequireLastPushApproval
-			rule.Parameters.RequiredApprovingReviewCount = r.RequiredApprovingReviewCount
-			rule.Parameters.RequiredReviewThreadResolution = r.RequiredReviewThreadResolution
-			rule.Parameters.RequiredStatusChecks = []GithubRuleSetRuleStatusCheck{}
-			for _, s := range r.RequiredStatusChecks {
-				rule.Parameters.RequiredStatusChecks = append(rule.Parameters.RequiredStatusChecks, GithubRuleSetRuleStatusCheck{
-					Context: s,
-				})
-			}
-			rule.Parameters.StrictRequiredStatusChecksPolicy = r.StrictRequiredStatusChecksPolicy
-			ruleset.Rules.Nodes = append(ruleset.Rules.Nodes, rule)
-		}
-
-		r.UpdateRuleset(dryrun, ruleset)
+		lRuleset.Id = rRuleset.Id
+		r.UpdateRuleset(dryrun, lRuleset)
 	}
 
 	CompareEntities(lgrs, rgrs, compareRulesets, onAdded, onRemoved, onChanged)
@@ -648,13 +508,13 @@ func (r *GoliacReconciliatorImpl) UpdateRepositoryUpdateArchived(dryrun bool, re
 	}
 }
 func (r *GoliacReconciliatorImpl) AddRuleset(dryrun bool, ruleset *GithubRuleSet) {
-	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "add_ruleset"}).Infof("ruleset: %s enforcement: %s", ruleset.Name, ruleset.Enforcement)
+	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "add_ruleset"}).Infof("ruleset: %s (id: %d) enforcement: %s", ruleset.Name, ruleset.Id, ruleset.Enforcement)
 	if !dryrun && r.executor != nil {
 		r.executor.AddRuleset(ruleset)
 	}
 }
 func (r *GoliacReconciliatorImpl) UpdateRuleset(dryrun bool, ruleset *GithubRuleSet) {
-	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_ruleset"}).Infof("ruleset: %s enforcement: %s", ruleset.Name, ruleset.Enforcement)
+	logrus.WithFields(map[string]interface{}{"dryrun": dryrun, "command": "update_ruleset"}).Infof("ruleset: %s (id: %d) enforcement: %s", ruleset.Name, ruleset.Id, ruleset.Enforcement)
 	if !dryrun && r.executor != nil {
 		r.executor.UpdateRuleset(ruleset)
 	}

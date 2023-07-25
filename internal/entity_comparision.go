@@ -1,7 +1,7 @@
 package internal
 
 type Comparable interface {
-	*GithubTeam | *GithubRepoComparable | *GithubRulesetComparable
+	*GithubTeam | *GithubRepoComparable | *GithubRuleSet
 }
 
 type CompareEqualAB[A Comparable, B Comparable] func(value1 A, value2 B) bool
