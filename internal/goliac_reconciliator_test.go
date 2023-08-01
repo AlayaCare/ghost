@@ -113,6 +113,10 @@ type ReconciliatorListenerRecorder struct {
 	RepositoriesDeleted        map[string]bool
 	RepositoriesUpdatePrivate  map[string]bool
 	RepositoriesUpdateArchived map[string]bool
+
+	RuleSetCreated map[string]*GithubRuleSet
+	RuleSetUpdated map[string]*GithubRuleSet
+	RuleSetDeleted []int
 }
 
 func NewReconciliatorListenerRecorder() *ReconciliatorListenerRecorder {
@@ -130,6 +134,9 @@ func NewReconciliatorListenerRecorder() *ReconciliatorListenerRecorder {
 		RepositoriesDeleted:        make(map[string]bool),
 		RepositoriesUpdatePrivate:  make(map[string]bool),
 		RepositoriesUpdateArchived: make(map[string]bool),
+		RuleSetCreated:             make(map[string]*GithubRuleSet),
+		RuleSetUpdated:             make(map[string]*GithubRuleSet),
+		RuleSetDeleted:             make([]int, 0),
 	}
 	return &r
 }
@@ -173,10 +180,13 @@ func (r *ReconciliatorListenerRecorder) UpdateRepositoryUpdateArchived(reponame 
 	r.RepositoriesUpdateArchived[reponame] = true
 }
 func (r *ReconciliatorListenerRecorder) AddRuleset(ruleset *GithubRuleSet) {
+	r.RuleSetCreated[ruleset.Name] = ruleset
 }
 func (r *ReconciliatorListenerRecorder) UpdateRuleset(ruleset *GithubRuleSet) {
+	r.RuleSetUpdated[ruleset.Name] = ruleset
 }
 func (r *ReconciliatorListenerRecorder) DeleteRuleset(rulesetid int) {
+	r.RuleSetDeleted = append(r.RuleSetDeleted, rulesetid)
 }
 func (r *ReconciliatorListenerRecorder) Begin() {
 }
@@ -189,7 +199,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: new team", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -220,9 +233,7 @@ func TestReconciliation(t *testing.T) {
 			appids:     make(map[string]int),
 		}
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 2 members created
 		assert.Equal(t, 2, len(recorder.TeamsCreated["new"]))
@@ -231,7 +242,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: new team with non english slug", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -262,9 +276,7 @@ func TestReconciliation(t *testing.T) {
 			appids:     make(map[string]int),
 		}
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 2 members created
 		assert.Equal(t, 2, len(recorder.TeamsCreated["nouveaut"]))
@@ -273,7 +285,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: existing team with new members", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -322,9 +337,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.teams["existing-owners"] = existingowners
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 members added
 		assert.Equal(t, 0, len(recorder.TeamsCreated))
@@ -333,7 +346,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: existing team with non english slug with new members", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -383,9 +399,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.teams["exist-ing-owners"] = existingowners
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 members added
 		assert.Equal(t, "exist-ing", remote.TeamSlugByName()["exist ing"])
@@ -395,7 +409,11 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: removed team without destructive operation", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
+
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
 			teams: make(map[string]*entity.Team),
@@ -417,9 +435,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.teams["removing"] = removing
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 team deleted
 		assert.Equal(t, 0, len(recorder.TeamDeleted))
@@ -451,9 +467,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.teams["removing"] = removing
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 team deleted
 		assert.Equal(t, 1, len(recorder.TeamDeleted))
@@ -461,7 +475,9 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: new repo without owner", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -483,9 +499,7 @@ func TestReconciliation(t *testing.T) {
 			appids:     make(map[string]int),
 		}
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 repo created
 		assert.Equal(t, 1, len(recorder.RepositoryCreated))
@@ -493,7 +507,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: new repo with owner", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -529,9 +546,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.teams["existing"] = existing
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 repo created
 		assert.Equal(t, 1, len(recorder.RepositoryCreated))
@@ -539,7 +554,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: existing repo with new owner (from read to write)", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -585,9 +603,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "pull",
 		}
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 team updated
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -599,7 +615,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: add a team to an existing repo", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -657,9 +676,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "ADMIN",
 		}
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 team added
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -671,7 +688,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: remove a team from an existing repo", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -734,9 +754,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "WRITE",
 		}
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 team removed
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -748,7 +766,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: remove a team member", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -794,9 +815,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "WRITE",
 		}
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 member removed
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -809,7 +828,9 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: add a team AND add it to an existing repo", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -861,9 +882,7 @@ func TestReconciliation(t *testing.T) {
 			Permission: "WRITE",
 		}
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 repo updated
 		assert.Equal(t, 0, len(recorder.RepositoryCreated))
@@ -874,7 +893,10 @@ func TestReconciliation(t *testing.T) {
 
 	t.Run("happy path: removed repo without destructive operation", func(t *testing.T) {
 		recorder := NewReconciliatorListenerRecorder()
-		r := NewGoliacReconciliatorImpl(recorder, &config.RepositoryConfig{})
+
+		repoconf := config.RepositoryConfig{}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
 
 		local := GoliacLocalMock{
 			users: make(map[string]*entity.User),
@@ -895,9 +917,7 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.repos["removing"] = removing
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 repo deleted
 		assert.Equal(t, 0, len(recorder.RepositoriesDeleted))
@@ -928,11 +948,219 @@ func TestReconciliation(t *testing.T) {
 		}
 		remote.repos["removing"] = removing
 
-		repoconf := config.RepositoryConfig{}
-
-		r.Reconciliate(&local, &remote, "teams", &repoconf, false)
+		r.Reconciliate(&local, &remote, "teams", false)
 
 		// 1 repo deleted
 		assert.Equal(t, 1, len(recorder.RepositoriesDeleted))
+	})
+}
+
+func TestReconciliationRulesets(t *testing.T) {
+
+	t.Run("happy path: no new ruleset in goliac conf", func(t *testing.T) {
+		recorder := NewReconciliatorListenerRecorder()
+		repoconf := config.RepositoryConfig{
+			EnableRulesets: true,
+		}
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
+
+		local := GoliacLocalMock{
+			users:    make(map[string]*entity.User),
+			teams:    make(map[string]*entity.Team),
+			repos:    make(map[string]*entity.Repository),
+			rulesets: make(map[string]*entity.RuleSet),
+		}
+
+		newRuleset := &entity.RuleSet{}
+		newRuleset.Metadata.Name = "new"
+		newRuleset.Enforcement = "evaluate"
+		newRuleset.Rules = append(newRuleset.Rules, struct {
+			Ruletype   string
+			Parameters entity.RuleSetParameters
+		}{
+			"required_signatures", entity.RuleSetParameters{},
+		})
+		local.rulesets["new"] = newRuleset
+
+		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
+			teams:      make(map[string]*GithubTeam),
+			repos:      make(map[string]*GithubRepository),
+			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
+			rulesets:   make(map[string]*GithubRuleSet),
+			appids:     make(map[string]int),
+		}
+
+		r.Reconciliate(&local, &remote, "teams", false)
+
+		// 1 ruleset created
+		assert.Equal(t, 0, len(recorder.RuleSetCreated))
+		assert.Equal(t, 0, len(recorder.RuleSetUpdated))
+		assert.Equal(t, 0, len(recorder.RuleSetDeleted))
+	})
+
+	t.Run("happy path: new ruleset", func(t *testing.T) {
+		recorder := NewReconciliatorListenerRecorder()
+
+		repoconf := config.RepositoryConfig{
+			EnableRulesets: true,
+			Rulesets: make([]struct {
+				Pattern string
+				Ruleset string
+			}, 0),
+		}
+		repoconf.Rulesets = append(repoconf.Rulesets, struct {
+			Pattern string
+			Ruleset string
+		}{
+			Pattern: ".*",
+			Ruleset: "new",
+		})
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
+
+		local := GoliacLocalMock{
+			users:    make(map[string]*entity.User),
+			teams:    make(map[string]*entity.Team),
+			repos:    make(map[string]*entity.Repository),
+			rulesets: make(map[string]*entity.RuleSet),
+		}
+
+		newRuleset := &entity.RuleSet{}
+		newRuleset.Metadata.Name = "new"
+		newRuleset.Enforcement = "evaluate"
+		newRuleset.Rules = append(newRuleset.Rules, struct {
+			Ruletype   string
+			Parameters entity.RuleSetParameters
+		}{
+			"required_signatures", entity.RuleSetParameters{},
+		})
+		local.rulesets["new"] = newRuleset
+
+		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
+			teams:      make(map[string]*GithubTeam),
+			repos:      make(map[string]*GithubRepository),
+			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
+			rulesets:   make(map[string]*GithubRuleSet),
+			appids:     make(map[string]int),
+		}
+
+		r.Reconciliate(&local, &remote, "teams", false)
+
+		// 1 ruleset created
+		assert.Equal(t, 1, len(recorder.RuleSetCreated))
+		assert.Equal(t, 0, len(recorder.RuleSetUpdated))
+		assert.Equal(t, 0, len(recorder.RuleSetDeleted))
+	})
+
+	t.Run("happy path: update ruleset (enforcement)", func(t *testing.T) {
+		recorder := NewReconciliatorListenerRecorder()
+
+		repoconf := config.RepositoryConfig{
+			EnableRulesets: true,
+			Rulesets: make([]struct {
+				Pattern string
+				Ruleset string
+			}, 0),
+		}
+		repoconf.Rulesets = append(repoconf.Rulesets, struct {
+			Pattern string
+			Ruleset string
+		}{
+			Pattern: ".*",
+			Ruleset: "update",
+		})
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
+
+		local := GoliacLocalMock{
+			users:    make(map[string]*entity.User),
+			teams:    make(map[string]*entity.Team),
+			repos:    make(map[string]*entity.Repository),
+			rulesets: make(map[string]*entity.RuleSet),
+		}
+
+		lRuleset := &entity.RuleSet{}
+		lRuleset.Metadata.Name = "update"
+		lRuleset.Enforcement = "evaluate"
+		lRuleset.Rules = append(lRuleset.Rules, struct {
+			Ruletype   string
+			Parameters entity.RuleSetParameters
+		}{
+			"required_signatures", entity.RuleSetParameters{},
+		})
+		local.rulesets["update"] = lRuleset
+
+		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
+			teams:      make(map[string]*GithubTeam),
+			repos:      make(map[string]*GithubRepository),
+			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
+			rulesets:   make(map[string]*GithubRuleSet),
+			appids:     make(map[string]int),
+		}
+
+		rRuleset := &GithubRuleSet{
+			Name:        "update",
+			Enforcement: "active",
+			Rules:       make(map[string]entity.RuleSetParameters),
+		}
+		rRuleset.Rules["required_signatures"] = entity.RuleSetParameters{}
+		remote.rulesets["update"] = rRuleset
+
+		r.Reconciliate(&local, &remote, "teams", false)
+
+		// 1 ruleset created
+		assert.Equal(t, 0, len(recorder.RuleSetCreated))
+		assert.Equal(t, 1, len(recorder.RuleSetUpdated))
+		assert.Equal(t, 0, len(recorder.RuleSetDeleted))
+	})
+
+	t.Run("happy path: delete ruleset", func(t *testing.T) {
+		recorder := NewReconciliatorListenerRecorder()
+
+		repoconf := config.RepositoryConfig{
+			EnableRulesets: true,
+			Rulesets: make([]struct {
+				Pattern string
+				Ruleset string
+			}, 0),
+		}
+		repoconf.DestructiveOperations.AllowDestructiveRulesets = true
+
+		r := NewGoliacReconciliatorImpl(recorder, &repoconf)
+
+		local := GoliacLocalMock{
+			users:    make(map[string]*entity.User),
+			teams:    make(map[string]*entity.Team),
+			repos:    make(map[string]*entity.Repository),
+			rulesets: make(map[string]*entity.RuleSet),
+		}
+
+		remote := GoliacRemoteMock{
+			users:      make(map[string]string),
+			teams:      make(map[string]*GithubTeam),
+			repos:      make(map[string]*GithubRepository),
+			teamsrepos: make(map[string]map[string]*GithubTeamRepo),
+			rulesets:   make(map[string]*GithubRuleSet),
+			appids:     make(map[string]int),
+		}
+
+		rRuleset := &GithubRuleSet{
+			Name:        "delete",
+			Enforcement: "active",
+			Rules:       make(map[string]entity.RuleSetParameters),
+		}
+		rRuleset.Rules["required_signatures"] = entity.RuleSetParameters{}
+		remote.rulesets["delete"] = rRuleset
+
+		r.Reconciliate(&local, &remote, "teams", false)
+
+		// 1 ruleset created
+		assert.Equal(t, 0, len(recorder.RuleSetCreated))
+		assert.Equal(t, 0, len(recorder.RuleSetUpdated))
+		assert.Equal(t, 1, len(recorder.RuleSetDeleted))
 	})
 }

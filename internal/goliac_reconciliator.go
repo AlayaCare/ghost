@@ -15,7 +15,7 @@ import (
  * GoliacReconciliator is here to sync the local state to the remote state
  */
 type GoliacReconciliator interface {
-	Reconciliate(local GoliacLocal, remote GoliacRemote, teamreponame string, repoconf *config.RepositoryConfig, dryrun bool) error
+	Reconciliate(local GoliacLocal, remote GoliacRemote, teamreponame string, dryrun bool) error
 }
 
 type GoliacReconciliatorImpl struct {
@@ -30,7 +30,7 @@ func NewGoliacReconciliatorImpl(executor ReconciliatorExecutor, repoconfig *conf
 	}
 }
 
-func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacRemote, teamsreponame string, repoconf *config.RepositoryConfig, dryrun bool) error {
+func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacRemote, teamsreponame string, dryrun bool) error {
 	rremote := NewMutableGoliacRemoteImpl(remote)
 	r.Begin(dryrun)
 	err := r.reconciliateUsers(local, rremote, dryrun)
@@ -52,7 +52,7 @@ func (r *GoliacReconciliatorImpl) Reconciliate(local GoliacLocal, remote GoliacR
 	}
 
 	if r.repoconfig.EnableRulesets {
-		err = r.reconciliateRulesets(local, rremote, repoconf, dryrun)
+		err = r.reconciliateRulesets(local, rremote, r.repoconfig, dryrun)
 		if err != nil {
 			r.Rollback(dryrun, err)
 			return err

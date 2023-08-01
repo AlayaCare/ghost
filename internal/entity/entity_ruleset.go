@@ -162,7 +162,7 @@ func (r *RuleSet) Validate(filename string) error {
 	}
 
 	for _, rule := range r.Rules {
-		if rule.Ruletype != "required_signatures" && rule.Ruletype != "pull_request" {
+		if rule.Ruletype != "required_signatures" && rule.Ruletype != "pull_request" && rule.Ruletype != "required_status_checks" {
 			return fmt.Errorf("invalid rulettype: %s for ruleset filename %s", rule.Ruletype, filename)
 		}
 	}

@@ -11,18 +11,17 @@ type RepositoryConfig struct {
 		Pattern string
 		Ruleset string
 	}
-	Enforce2FA              bool `yaml:"enforce_2fa"`
-	MaxChangesets           int  `yaml:"max_changesets"`
-	GithubConcurrentThreads int  `yaml:"github_concurrent_threads"`
+	MaxChangesets           int `yaml:"max_changesets"`
+	GithubConcurrentThreads int `yaml:"github_concurrent_threads"`
 	UserSync                struct {
 		Plugin string `yaml:"plugin"`
 		Path   string `yaml:"path"`
 	}
 	DestructiveOperations struct {
-		AllowDestructiveRepositories bool `yaml:"allow_destructive_repositories"`
-		AllowDestructiveTeams        bool `yaml:"allow_destructive_teams"`
-		AllowDestructiveUsers        bool `yaml:"allow_destructive_users"`
-		AllowDestructiveRulesets     bool `yaml:"allow_destructive_rulesets"`
+		AllowDestructiveRepositories bool `yaml:"repositories"`
+		AllowDestructiveTeams        bool `yaml:"teams"`
+		AllowDestructiveUsers        bool `yaml:"users"`
+		AllowDestructiveRulesets     bool `yaml:"rulesets"`
 	} `yaml:"destructive_operations"`
 }
 
